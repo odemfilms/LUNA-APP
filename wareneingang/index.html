@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wareneingang Messungen</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --text: #1d2330; --muted: #667085; --line: #e3e6eb;
+    --rot: #c8312b; --rot-bg: #fdecea; --gelb: #a15c00; --gelb-bg: #fff4dc;
+    --gruen: #1d7a46; --gruen-bg: #e5f5ec; --blau: #2457c5; --blau-bg: #e8effc;
+    --grau-bg: #eef0f3; --akzent: #2457c5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1b1f27; --text: #e6e9ef; --muted: #98a1b2; --line: #2c323d;
+      --rot: #ff7b72; --rot-bg: #3a1d1c; --gelb: #f0b45a; --gelb-bg: #3a2c12;
+      --gruen: #5fcf8d; --gruen-bg: #16301f; --blau: #8bb0ff; --blau-bg: #1b2742;
+      --grau-bg: #262b35; --akzent: #8bb0ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; padding: 16px 24px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 16px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  .stand { color: var(--muted); font-size: 13px; }
+  input[type=search], input[type=text], textarea { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  input[type=search] { width: 280px; max-width: 100%; }
+  main { padding: 20px 24px 48px; max-width: 1400px; margin: 0 auto; display: grid; gap: 20px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; border-left: 5px solid var(--farbe); }
+  .kpi b { display: block; font-size: 30px; line-height: 1.1; color: var(--farbe); }
+  .kpi span { color: var(--muted); font-size: 13px; }
+  .spalten { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 900px) { .spalten { grid-template-columns: 1fr; } header { padding: 12px 16px; } main { padding: 16px; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .panel > .kopf { padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .panel > .kopf small, .kopf h2 small { color: var(--muted); font-weight: 400; font-size: 13px; }
+  details.panel > summary { cursor: pointer; list-style: none; }
+  details.panel:not([open]) > summary { border-bottom: 0; }
+  details.panel:not([open]) #filter { display: none !important; }
+  button.klein { font-size: 11px; padding: 2px 8px; }
+  .karte { padding: 12px 16px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; cursor: pointer; }
+  .karte:last-child { border-bottom: 0; }
+  .karte:hover { background: var(--grau-bg); }
+  .karte .titel { font-weight: 600; }
+  .karte .info { color: var(--muted); font-size: 13px; grid-column: 1; }
+  .karte .aktionen { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
+  .leer { padding: 24px 16px; color: var(--muted); text-align: center; }
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .s-ZU_VOGT { background: var(--rot-bg); color: var(--rot); }
+  .s-BEI_VOGT { background: var(--gelb-bg); color: var(--gelb); }
+  .s-OK { background: var(--gruen-bg); color: var(--gruen); }
+  .s-NOK, .s-FREIPASS_NOK { background: var(--rot); color: #fff; }
+  .s-FREIPASS { background: var(--blau-bg); color: var(--blau); }
+  .s-NICHT_GEMESSEN { background: var(--gelb-bg); color: var(--gelb); }
+  .punkte { display: inline-flex; gap: 3px; vertical-align: middle; }
+  .punkte i { width: 11px; height: 11px; border-radius: 50%; background: var(--grau-bg); border: 1px solid var(--line); }
+  .punkte .p-OK { background: var(--gruen); border-color: var(--gruen); }
+  .punkte .p-NOK, .punkte .p-FREIPASS_NOK { background: var(--rot); border-color: var(--rot); }
+  .punkte .p-FREIPASS { background: var(--blau-bg); border-color: var(--blau); }
+  .punkte .p-NICHT_GEMESSEN { background: var(--gelb); border-color: var(--gelb); }
+  .punkte .p-ZU_VOGT, .punkte .p-BEI_VOGT { background: transparent; border: 2px dashed var(--rot); }
+  .felder { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .legende { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+  .legende span { display: inline-flex; align-items: center; gap: 5px; }
+  .s-phase { background: var(--grau-bg); color: var(--muted); font-weight: 500; }
+  button { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button.ok { border-color: var(--gruen); color: var(--gruen); }
+  button.nok { border-color: var(--rot); color: var(--rot); }
+  button.primaer { background: var(--akzent); border-color: var(--akzent); color: var(--panel); }
+  button.chip[aria-pressed=true] { background: var(--text); color: var(--panel); border-color: var(--text); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; background: var(--grau-bg); }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--grau-bg); }
+  .tabelle { overflow-x: auto; }
+  .fehler { background: var(--rot-bg); color: var(--rot); padding: 12px 16px; border-radius: 10px; }
+  dialog { border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(720px, calc(100vw - 32px)); background: var(--panel); color: var(--text); }
+  dialog::backdrop { background: rgba(0,0,0,.4); }
+  dialog .inhalt { padding: 20px; display: grid; gap: 14px; }
+  dialog .zeile { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  dialog label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+  .verlauf { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--line); margin-left: 6px; }
+  .verlauf li { padding: 6px 0 6px 16px; position: relative; }
+  .verlauf li::before { content: ""; position: absolute; left: -7px; top: 12px; width: 12px; height: 12px; border-radius: 50%; background: var(--line); }
+  .verlauf li.aktiv { font-weight: 600; }
+  .regeln { color: var(--muted); font-size: 13px; }
+  .regeln summary { cursor: pointer; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Wareneingang · Stichprobenmessung</h1>
+    <div class="stand" id="stand">Lade Daten …</div>
+  </div>
+  <input type="search" id="suche" placeholder="Suche Artikel, Bezeichnung, Lieferant …" aria-label="Suche">
+</header>
+
+<main>
+  <div id="fehler" class="fehler" hidden></div>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="spalten">
+    <div class="panel">
+      <div class="kopf"><h2>Muss zu Vogt</h2><small>gelieferte Ware ohne Messergebnis, älteste zuerst</small></div>
+      <div id="liste-vogt"></div>
+    </div>
+    <div class="panel">
+      <div class="kopf"><h2>Freipass</h2><small>keine Messung nötig · letzte 2 Monate</small></div>
+      <div id="liste-freipass"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="kopf">
+      <h2>Artikel · was passiert mit der nächsten Lieferung?</h2>
+      <div class="legende">
+        <span><span class="punkte"><i class="p-OK"></i></span>i.O.</span>
+        <span><span class="punkte"><i class="p-NOK"></i></span>Abweichung</span>
+        <span><span class="punkte"><i class="p-FREIPASS"></i></span>Freipass</span>
+        <span><span class="punkte"><i class="p-NICHT_GEMESSEN"></i></span>nicht gemessen</span>
+        <span><span class="punkte"><i class="p-ZU_VOGT"></i></span>offen</span>
+      </div>
+    </div>
+    <div class="tabelle"><table>
+      <thead><tr><th>Artikel</th><th>Lieferant</th><th>Verlauf</th><th>Letzte Lieferung</th><th>Nächste Lieferung</th></tr></thead>
+      <tbody id="artikel"></tbody>
+    </table></div>
+  </section>
+
+  <details class="panel" id="alle">
+    <summary class="kopf">
+      <h2>Alle Lieferungen <small>(aufklappen)</small></h2>
+      <div id="filter" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    </summary>
+    <div class="tabelle"><table>
+      <thead><tr><th>Monat</th><th>Artikel</th><th>Lieferant</th><th>Regel</th><th>Status</th></tr></thead>
+      <tbody id="tabelle"></tbody>
+    </table></div>
+  </details>
+
+  <details class="regeln">
+    <summary>Wie wird entschieden?</summary>
+    <ol>
+      <li>Neue Artikel (pro Lieferant) gehen zu Vogt, bis <b>3 Messungen in Folge i.O.</b> sind.</li>
+      <li>Danach erhalten die nächsten <b>3 Lieferungen einen Freipass</b>.</li>
+      <li>Die 4. Lieferung geht zur <b>Kontrollmessung</b>. Ist sie i.O., folgen nochmals 3 Freipässe.</li>
+      <li>Danach folgt die <b>Requalifizierung</b> bei Vogt. Ist sie i.O., beginnt der Ablauf wieder bei Schritt 2.</li>
+      <li>Jede <b>Abweichung</b> (über 0.002 mm im Massprotokoll), auch eine nachträglich gemeldete bei einer Freipass-Lieferung, setzt zurück auf Schritt 1.</li>
+      <li>Eine zusätzliche Messung i.O. während der Freipass-Phase verbraucht keinen Freipass.</li>
+      <li>Solange ein Messergebnis aussteht, gehen auch die folgenden Lieferungen desselben Artikels zu Vogt.</li>
+      <li>Wurde ein Artikel noch nie bei Vogt gemessen, muss die nächste Lieferung zu Vogt.</li>
+      <li>Eine Lieferung ist ein ✓ in der Excel-Liste (pro Bestellung, wenn die Bestell-Nr. in der Pivot eingeblendet ist, sonst pro Monat).</li>
+    </ol>
+  </details>
+</main>
+
+<dialog id="dialog"><div class="inhalt" id="dialog-inhalt"></div></dialog>
+
+<script src="regeln.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
