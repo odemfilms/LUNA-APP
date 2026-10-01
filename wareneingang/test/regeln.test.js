@@ -79,7 +79,7 @@ test("offenes Messergebnis blockiert Freipässe der Folgelieferungen", () => {
   const res = auswerten(liste, r).lieferungen.slice().reverse();
   assert.strictEqual(res[2].auswertung.status, STATUS.BEI_VOGT);
   assert.strictEqual(res[3].auswertung.status, STATUS.ZU_VOGT);
-  assert.match(res[3].auswertung.grund, /WE003/);
+  assert.match(res[3].auswertung.grund, /2026-01-03/);
 
   r.WE003 = { ergebnis: "OK" };
   assert.strictEqual(auswerten(liste, r).lieferungen.slice().reverse()[3].auswertung.status, STATUS.FREIPASS);
@@ -97,4 +97,25 @@ test("Zusammenfassung zeigt, was die nächste Lieferung braucht", () => {
   const a = artikel["A-100|Muster AG"];
   assert.strictEqual(a.naechsteMussZuVogt, true);
   assert.match(a.naechsteLieferung, /Kontrollmessung/);
+});
+
+test("freiwillige Messung während Freipass verbraucht keinen Freipass", () => {
+  const liste = lieferungen(8);
+  const r = ok("WE001", "WE002", "WE003", "WE004", "WE005");
+  assert.deepStrictEqual(statusFolge(liste, r), ["OK", "OK", "OK", "OK", "OK", "FREIPASS", "FREIPASS", "FREIPASS"]);
+});
+
+test("nicht gemessene Lieferung in einer Messphase wird markiert und zählt nicht", () => {
+  const liste = lieferungen(3);
+  const r = { WE001: { ergebnis: "NICHT_GEMESSEN" }, WE002: { ergebnis: "OK" } };
+  const res = auswerten(liste, r).lieferungen.slice().reverse();
+  assert.strictEqual(res[0].auswertung.status, STATUS.NICHT_GEMESSEN);
+  assert.strictEqual(res[1].auswertung.regelPhase, "Qualifizierung 1/3");
+  assert.strictEqual(res[2].auswertung.regelPhase, "Qualifizierung 2/3");
+});
+
+test("nicht messpflichtige Artikel gehen nie zu Vogt", () => {
+  const { lieferungen: res, artikel } = auswerten(lieferungen(2), {}, { "A-100|Muster AG": { ausgenommen: true } });
+  assert.ok(res.every((l) => l.auswertung.status === STATUS.AUSGENOMMEN));
+  assert.strictEqual(artikel["A-100|Muster AG"].naechsteMussZuVogt, false);
 });

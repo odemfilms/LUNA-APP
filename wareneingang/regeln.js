@@ -9,6 +9,7 @@
 //   Jede Abweichung (bei Kontrolle, Requalifizierung oder gemeldet bei einer
 //   Freipass-Lieferung) → zurück zu Schritt 1.
 //
+// Eine freiwillige Messung i.O. während der Freipass-Phase verbraucht keinen Freipass.
 // Solange das Ergebnis einer Messung aussteht, gehen auch die folgenden Lieferungen
 // desselben Artikels sicherheitshalber zu Vogt. Sobald das Ergebnis erfasst ist,
 // wird alles neu berechnet.
@@ -35,10 +36,12 @@
     NOK: "NOK",               // gemessen, ausserhalb Toleranz
     FREIPASS: "FREIPASS",     // keine Messung nötig
     FREIPASS_NOK: "FREIPASS_NOK", // Freipass, aber Abweichung nachträglich gemeldet
+    NICHT_GEMESSEN: "NICHT_GEMESSEN", // hätte zu Vogt gemusst, ging aber nicht
+    AUSGENOMMEN: "AUSGENOMMEN", // Artikel ist nicht messpflichtig
   };
 
   function artikelSchluessel(l) {
-    return (l.artikel || "").trim() + "|" + (l.lieferant || "").trim();
+    return (l.artikel || "").trim() + "|" + (l.lieferantId || l.lieferant || "").trim();
   }
 
   function vergleiche(a, b) {
@@ -76,7 +79,8 @@
       case PHASE.REQUALI:
         return { phase: PHASE.FREIPASS_1, zaehler: 0 };
       default:
-        return nachFreipass(zustand);
+        // Zusätzliche Messung während der Freipass-Phase: Freipass bleibt, es wird kein Platz verbraucht
+        return zustand;
     }
   }
 
@@ -88,11 +92,13 @@
   }
 
   // Berechnet für alle Lieferungen den Status.
-  // lieferungen: [{ id, eingang: "YYYY-MM-DD", artikel, lieferant, ... }]
-  // rueckmeldungen: { [id]: { ergebnis: "OK" | "NOK", beiVogtSeit, ... } }
+  // lieferungen: [{ id, eingang: "YYYY-MM" oder "YYYY-MM-DD", artikel, lieferantId, lieferant, ... }]
+  // rueckmeldungen: { [id]: { ergebnis: "OK" | "NOK" | "NICHT_GEMESSEN", beiVogtSeit, ... } }
+  // einstellungen: { [artikelSchluessel]: { ausgenommen: true } }
   // Rückgabe: { lieferungen: [...mit .auswertung], artikel: { [schluessel]: Zusammenfassung } }
-  function auswerten(lieferungen, rueckmeldungen) {
+  function auswerten(lieferungen, rueckmeldungen, einstellungen) {
     rueckmeldungen = rueckmeldungen || {};
+    einstellungen = einstellungen || {};
     const gruppen = new Map();
     for (const l of lieferungen) {
       const k = artikelSchluessel(l);
@@ -105,31 +111,38 @@
 
     for (const [schluessel, liste] of gruppen) {
       liste.sort(vergleiche);
+      const ausgenommen = !!(einstellungen[schluessel] && einstellungen[schluessel].ausgenommen);
       let zustand = { phase: PHASE.QUALI, zaehler: 0 };
       let offeneMessung = null;
 
       for (const l of liste) {
         const r = rueckmeldungen[l.id] || {};
-        const regelPhase = phaseText(zustand);
-        let mussZuVogt = istMessphase(zustand.phase);
+        const regelPhase = ausgenommen ? "Nicht messpflichtig" : phaseText(zustand);
+        let mussZuVogt = !ausgenommen && istMessphase(zustand.phase);
         let grund = regelPhase;
-        if (!mussZuVogt && offeneMessung) {
+        if (!mussZuVogt && !ausgenommen && offeneMessung) {
           mussZuVogt = true;
-          grund = "Ergebnis der Vormessung (" + offeneMessung + ") ausstehend";
+          grund = "Ergebnis der Lieferung " + offeneMessung + " ausstehend";
         }
 
         let status;
-        if (r.ergebnis === "NOK") {
+        if (ausgenommen && r.ergebnis !== "NOK" && r.ergebnis !== "OK") {
+          status = STATUS.AUSGENOMMEN;
+        } else if (r.ergebnis === "NOK") {
           status = mussZuVogt ? STATUS.NOK : STATUS.FREIPASS_NOK;
           zustand = nachAbweichung();
         } else if (r.ergebnis === "OK") {
           status = STATUS.OK;
           zustand = nachOk(zustand);
+        } else if (r.ergebnis === "NICHT_GEMESSEN") {
+          // Freipass-Platz wird verbraucht; in einer Messphase zählt es nicht als Messung
+          status = mussZuVogt ? STATUS.NICHT_GEMESSEN : STATUS.FREIPASS;
+          if (!istMessphase(zustand.phase)) zustand = nachFreipass(zustand);
         } else if (mussZuVogt) {
           // Ergebnis offen: für die Zählung wird i.O. angenommen, aber bis das
           // Ergebnis da ist, gehen alle weiteren Lieferungen ebenfalls zu Vogt.
           status = r.beiVogtSeit ? STATUS.BEI_VOGT : STATUS.ZU_VOGT;
-          offeneMessung = l.id;
+          offeneMessung = l.eingang;
           zustand = nachOk(zustand);
         } else {
           status = STATUS.FREIPASS;
@@ -145,14 +158,19 @@
       artikel[schluessel] = {
         artikel: letzte.artikel,
         bezeichnung: letzte.bezeichnung,
+        lieferantId: letzte.lieferantId,
         lieferant: letzte.lieferant,
         anzahl: liste.length,
-        naechsteLieferung: istMessphase(zustand.phase)
+        letzteLieferung: letzte.eingang,
+        ausgenommen,
+        naechsteLieferung: ausgenommen
+          ? "Nicht messpflichtig"
+          : istMessphase(zustand.phase)
           ? "Zu Vogt – " + phaseText(zustand)
           : offeneMessung
-            ? "Zu Vogt (Ergebnis " + offeneMessung + " ausstehend)"
+            ? "Zu Vogt (Ergebnis Lieferung " + offeneMessung + " ausstehend)"
             : phaseText(zustand),
-        naechsteMussZuVogt: !!offeneMessung || istMessphase(zustand.phase),
+        naechsteMussZuVogt: !ausgenommen && (!!offeneMessung || istMessphase(zustand.phase)),
       };
     }
 
