@@ -55,3 +55,12 @@ Das Dashboard erkennt die neue Spalte automatisch. Bereits erfasste Ergebnisse p
 7. Solange ein Messergebnis aussteht, gehen auch folgende Lieferungen desselben Artikels zu Vogt.
 
 Die Logik steht in `regeln.js`, das Einlesen der Excel-Liste in `liste.js` und `xlsx.js`. Tests: `node --test test/*.test.js`
+
+## Variante ohne Server: Excel-Dashboard
+
+`excel/erzeuge_excel.py` ergänzt die Excel-Liste um die Blätter «Übersicht», «Ergebnisse», «Status», «Abweichungen» und «Anleitung» sowie das ausgeblendete Blatt «Berechnung». Alles läuft über Formeln, ohne Makros. Die BI-Pivot bleibt unverändert und aktualisiert sich weiter beim Öffnen. Die bisherigen Zellfarben werden einmalig als Ergebnisse übernommen.
+
+```
+pip install openpyxl
+python3 excel/erzeuge_excel.py Lieferungen_zu_Vogt.xlsx Lieferungen_zu_Vogt_Dashboard.xlsx
+```
