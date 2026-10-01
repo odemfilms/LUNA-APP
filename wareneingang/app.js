@@ -11,7 +11,6 @@
     FREIPASS: "Freipass",
     FREIPASS_NOK: "Freipass · Abweichung gemeldet",
     NICHT_GEMESSEN: "Nicht gemessen",
-    AUSGENOMMEN: "Nicht messpflichtig",
   };
   const OFFEN = [STATUS.ZU_VOGT, STATUS.BEI_VOGT];
   const ABWEICHUNG = [STATUS.NOK, STATUS.FREIPASS_NOK];
@@ -59,7 +58,7 @@
       const res = await fetch("api/daten", { cache: "no-store" });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).fehler || "Server antwortet mit " + res.status);
       daten = await res.json();
-      auswertung = auswerten(daten.lieferungen, daten.rueckmeldungen, daten.artikel);
+      auswertung = auswerten(daten.lieferungen, daten.rueckmeldungen);
       $("fehler").hidden = true;
       $("stand").textContent = "Liste zuletzt aktualisiert " + zeit(daten.listeStand) + " · geprüft " + zeit(new Date().toISOString()) +
         " · " + Object.keys(auswertung.artikel).length + " Artikel/Lieferanten · " + daten.lieferungen.length + " Lieferungen";
@@ -82,7 +81,7 @@
     const freipass = alle.filter((l) => l.auswertung.status === STATUS.FREIPASS && tageSeit(l.eingang) <= FREIPASS_TAGE);
     const artikel = Object.entries(auswertung.artikel);
     const naechsteVogt = artikel.filter(([, a]) => a.naechsteMussZuVogt).length;
-    const naechsteFrei = artikel.filter(([, a]) => !a.naechsteMussZuVogt && !a.ausgenommen).length;
+    const naechsteFrei = artikel.filter(([, a]) => !a.naechsteMussZuVogt).length;
     const abw = alle.filter((l) => ABWEICHUNG.includes(l.auswertung.status) && tageSeit(l.eingang) <= 365);
 
     $("kpis").innerHTML = [
@@ -105,9 +104,9 @@
 
     // Artikelübersicht: was passiert mit der nächsten Lieferung?
     const artikelSichtbar = artikel.filter(([, a]) => passt(a)).sort(([, a], [, b]) =>
-      (b.naechsteMussZuVogt - a.naechsteMussZuVogt) || (a.ausgenommen - b.ausgenommen) || a.artikel.localeCompare(b.artikel) || a.lieferant.localeCompare(b.lieferant));
+      (b.naechsteMussZuVogt - a.naechsteMussZuVogt) || a.artikel.localeCompare(b.artikel) || a.lieferant.localeCompare(b.lieferant));
     $("artikel").innerHTML = artikelSichtbar.map(([k, a]) => {
-      const klasse = a.ausgenommen ? "s-AUSGENOMMEN" : a.naechsteMussZuVogt ? "s-ZU_VOGT" : "s-FREIPASS";
+      const klasse = a.naechsteMussZuVogt ? "s-ZU_VOGT" : "s-FREIPASS";
       return '<tr data-schluessel="' + esc(k) + '"><td><b>' + esc(a.artikel) + "</b><br><small>" + esc(a.bezeichnung) + "</small></td><td>" + esc(a.lieferant) + "</td>" +
         "<td>" + verlauf(k) + "</td><td>" + zeitpunkt(a.letzteLieferung) + "</td>" +
         '<td><span class="badge ' + klasse + '">' + esc(a.naechsteLieferung) + "</span></td></tr>";
@@ -127,7 +126,7 @@
     });
     $("tabelle").innerHTML = tab.length ? tab.map((l) =>
       '<tr data-schluessel="' + esc(l.auswertung.schluessel) + '">' +
-      "<td>" + zeitpunkt(l.eingang) + "</td><td><b>" + esc(l.artikel) + "</b><br><small>" + esc(l.bezeichnung) + "</small></td><td>" + esc(l.lieferant) + "</td>" +
+      "<td>" + zeitpunkt(l.eingang) + (l.bestellung ? "<br><small>Best. " + esc(l.bestellung) + "</small>" : "") + "</td><td><b>" + esc(l.artikel) + "</b><br><small>" + esc(l.bezeichnung) + "</small></td><td>" + esc(l.lieferant) + "</td>" +
       '<td><span class="badge s-phase">' + esc(l.auswertung.regelPhase) + "</span></td><td>" + badge(l.auswertung.status) + "</td></tr>"
     ).join("") : '<tr><td colspan="5" class="leer">Keine Lieferungen gefunden.</td></tr>';
 
@@ -186,9 +185,7 @@
           (r && rueckmeldungText(r) ? '<br><small class="stand">' + esc(rueckmeldungText(r)) + "</small>" : "") +
           "</li>";
       }).join("") + "</ul>" +
-      '<label class="schalter"><input type="checkbox" id="f-ausgenommen"' + (a.ausgenommen ? " checked" : "") + "> Artikel ist nicht messpflichtig (geht nie zu Vogt)</label>" +
       '<div class="zeile"><button data-schliessen>Schliessen</button></div>';
-    $("f-ausgenommen").onchange = (e) => senden("api/artikel", { schluessel, ausgenommen: e.target.checked, erfasstVon: name() });
     if (!$("dialog").open) $("dialog").showModal();
   }
 

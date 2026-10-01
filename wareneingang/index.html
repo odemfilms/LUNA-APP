@@ -55,7 +55,6 @@
   .s-NOK, .s-FREIPASS_NOK { background: var(--rot); color: #fff; }
   .s-FREIPASS { background: var(--blau-bg); color: var(--blau); }
   .s-NICHT_GEMESSEN { background: var(--gelb-bg); color: var(--gelb); }
-  .s-AUSGENOMMEN { background: var(--grau-bg); color: var(--muted); }
   .punkte { display: inline-flex; gap: 3px; vertical-align: middle; }
   .punkte i { width: 11px; height: 11px; border-radius: 50%; background: var(--grau-bg); border: 1px solid var(--line); }
   .punkte .p-OK { background: var(--gruen); border-color: var(--gruen); }
@@ -64,7 +63,6 @@
   .punkte .p-NICHT_GEMESSEN { background: var(--gelb); border-color: var(--gelb); }
   .punkte .p-ZU_VOGT, .punkte .p-BEI_VOGT { background: transparent; border: 2px dashed var(--rot); }
   .felder { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-  .schalter { display: flex !important; align-items: center; gap: 8px; color: var(--text) !important; }
   .legende { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
   .legende span { display: inline-flex; align-items: center; gap: 5px; }
   .s-phase { background: var(--grau-bg); color: var(--muted); font-weight: 500; }
@@ -157,7 +155,8 @@
       <li>Jede <b>Abweichung</b> (über 0.002 mm im Massprotokoll), auch eine nachträglich gemeldete bei einer Freipass-Lieferung, setzt zurück auf Schritt 1.</li>
       <li>Eine zusätzliche Messung i.O. während der Freipass-Phase verbraucht keinen Freipass.</li>
       <li>Solange ein Messergebnis aussteht, gehen auch die folgenden Lieferungen desselben Artikels zu Vogt.</li>
-      <li>Eine Lieferung ist ein ✓ in der Excel-Liste (Artikel × Lieferant × Geschäftsmonat).</li>
+      <li>Wurde ein Artikel noch nie bei Vogt gemessen, muss die nächste Lieferung zu Vogt.</li>
+      <li>Eine Lieferung ist ein ✓ in der Excel-Liste (pro Bestellung, wenn die Bestell-Nr. in der Pivot eingeblendet ist, sonst pro Monat).</li>
     </ol>
   </details>
 </main>

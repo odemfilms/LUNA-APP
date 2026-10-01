@@ -37,7 +37,6 @@
     FREIPASS: "FREIPASS",     // keine Messung nötig
     FREIPASS_NOK: "FREIPASS_NOK", // Freipass, aber Abweichung nachträglich gemeldet
     NICHT_GEMESSEN: "NICHT_GEMESSEN", // hätte zu Vogt gemusst, ging aber nicht
-    AUSGENOMMEN: "AUSGENOMMEN", // Artikel ist nicht messpflichtig
   };
 
   function artikelSchluessel(l) {
@@ -94,11 +93,9 @@
   // Berechnet für alle Lieferungen den Status.
   // lieferungen: [{ id, eingang: "YYYY-MM" oder "YYYY-MM-DD", artikel, lieferantId, lieferant, ... }]
   // rueckmeldungen: { [id]: { ergebnis: "OK" | "NOK" | "NICHT_GEMESSEN", beiVogtSeit, ... } }
-  // einstellungen: { [artikelSchluessel]: { ausgenommen: true } }
   // Rückgabe: { lieferungen: [...mit .auswertung], artikel: { [schluessel]: Zusammenfassung } }
-  function auswerten(lieferungen, rueckmeldungen, einstellungen) {
+  function auswerten(lieferungen, rueckmeldungen) {
     rueckmeldungen = rueckmeldungen || {};
-    einstellungen = einstellungen || {};
     const gruppen = new Map();
     for (const l of lieferungen) {
       const k = artikelSchluessel(l);
@@ -111,24 +108,22 @@
 
     for (const [schluessel, liste] of gruppen) {
       liste.sort(vergleiche);
-      const ausgenommen = !!(einstellungen[schluessel] && einstellungen[schluessel].ausgenommen);
       let zustand = { phase: PHASE.QUALI, zaehler: 0 };
       let offeneMessung = null;
 
       for (const l of liste) {
-        const r = rueckmeldungen[l.id] || {};
-        const regelPhase = ausgenommen ? "Nicht messpflichtig" : phaseText(zustand);
-        let mussZuVogt = !ausgenommen && istMessphase(zustand.phase);
+        // Rückmeldungen aus der Zeit vor der Zählung pro Bestellung gelten für den ganzen Monat
+        const r = rueckmeldungen[l.id] || (l.monatsId && rueckmeldungen[l.monatsId]) || {};
+        const regelPhase = phaseText(zustand);
+        let mussZuVogt = istMessphase(zustand.phase);
         let grund = regelPhase;
-        if (!mussZuVogt && !ausgenommen && offeneMessung) {
+        if (!mussZuVogt && offeneMessung) {
           mussZuVogt = true;
           grund = "Ergebnis der Lieferung " + offeneMessung + " ausstehend";
         }
 
         let status;
-        if (ausgenommen && r.ergebnis !== "NOK" && r.ergebnis !== "OK") {
-          status = STATUS.AUSGENOMMEN;
-        } else if (r.ergebnis === "NOK") {
+        if (r.ergebnis === "NOK") {
           status = mussZuVogt ? STATUS.NOK : STATUS.FREIPASS_NOK;
           zustand = nachAbweichung();
         } else if (r.ergebnis === "OK") {
@@ -162,15 +157,12 @@
         lieferant: letzte.lieferant,
         anzahl: liste.length,
         letzteLieferung: letzte.eingang,
-        ausgenommen,
-        naechsteLieferung: ausgenommen
-          ? "Nicht messpflichtig"
-          : istMessphase(zustand.phase)
+        naechsteLieferung: istMessphase(zustand.phase)
           ? "Zu Vogt – " + phaseText(zustand)
           : offeneMessung
             ? "Zu Vogt (Ergebnis Lieferung " + offeneMessung + " ausstehend)"
             : phaseText(zustand),
-        naechsteMussZuVogt: !ausgenommen && (!!offeneMessung || istMessphase(zustand.phase)),
+        naechsteMussZuVogt: !!offeneMessung || istMessphase(zustand.phase),
       };
     }
 

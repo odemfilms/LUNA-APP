@@ -2,7 +2,8 @@
 //
 // Jedes ✓ in einer Monatsspalte ist eine Lieferung. Sind in der Pivot zusätzlich
 // "Bestell-Nr." oder "Bestell-Nr. - Position" als Zeilenfelder eingeblendet, wird
-// jede Bestellposition einzeln gezählt.
+// jede Bestellposition einzeln gezählt. Ergebnisse, die noch pro Monat erfasst wurden,
+// gelten dann über "monatsId" für alle Bestellungen dieses Monats.
 
 const { lesen, excelDatum } = require("./xlsx");
 
@@ -69,6 +70,7 @@ function lesePivot(blatt, kopf) {
       const lieferantKey = werte.lieferantId || werte.lieferant;
       lieferungen.push({
         id: [werte.artikel, lieferantKey, werte.bestellung, monat].filter(Boolean).join("|"),
+        monatsId: [werte.artikel, lieferantKey, monat].join("|"),
         eingang: monat,
         artikel: werte.artikel,
         bezeichnung: werte.bezeichnung,
@@ -131,11 +133,13 @@ function altbestand(liste) {
     if (!ergebnis) continue;
     rueckmeldungen[l.id] = { ergebnis, bemerkung: l._kommentar, erfasstVon: "Übernahme Excel-Liste", datum: null };
   }
-  const nichtZugeordnet = [];
   for (const a of liste.abweichungen) {
     const monat = a.datum.slice(0, 7);
-    const l = liste.lieferungen.find((x) => x.artikel === a.artikel && x.eingang === monat && x.lieferant === a.lieferant);
-    if (!l) { nichtZugeordnet.push(a); continue; }
+    const passend = (x) => x.artikel === a.artikel && x.eingang === monat && x.lieferant === a.lieferant;
+    // Mit Bestellnummer in der Pivot genau die Bestellung, sonst der Monat
+    const l = liste.lieferungen.find((x) => passend(x) && x.bestellung && a.bestellnummer && x.bestellung.startsWith(a.bestellnummer))
+      || liste.lieferungen.find(passend);
+    if (!l) continue; // Abweichung ohne passendes ✓ wird ignoriert
     rueckmeldungen[l.id] = Object.assign({}, rueckmeldungen[l.id], {
       ergebnis: "NOK",
       massabweichung: a.massabweichung,
@@ -146,7 +150,7 @@ function altbestand(liste) {
       datum: a.datum,
     });
   }
-  return { rueckmeldungen, nichtZugeordnet };
+  return { rueckmeldungen };
 }
 
 function ohneIntern(l) {

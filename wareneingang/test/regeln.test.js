@@ -114,8 +114,16 @@ test("nicht gemessene Lieferung in einer Messphase wird markiert und zählt nich
   assert.strictEqual(res[2].auswertung.regelPhase, "Qualifizierung 2/3");
 });
 
-test("nicht messpflichtige Artikel gehen nie zu Vogt", () => {
-  const { lieferungen: res, artikel } = auswerten(lieferungen(2), {}, { "A-100|Muster AG": { ausgenommen: true } });
-  assert.ok(res.every((l) => l.auswertung.status === STATUS.AUSGENOMMEN));
-  assert.strictEqual(artikel["A-100|Muster AG"].naechsteMussZuVogt, false);
+test("Artikel ohne frühere Messung bei Vogt: nächste Lieferung muss zu Vogt", () => {
+  const liste = lieferungen(4);
+  const r = Object.fromEntries(liste.map((l) => [l.id, { ergebnis: "NICHT_GEMESSEN" }]));
+  const { artikel } = auswerten(liste, r);
+  assert.strictEqual(artikel["A-100|Muster AG"].naechsteMussZuVogt, true);
+  assert.match(artikel["A-100|Muster AG"].naechsteLieferung, /Qualifizierung 1\/3/);
+});
+
+test("Rückmeldung pro Monat gilt für alle Bestellungen dieses Monats", () => {
+  const liste = [1, 2].map((n) => ({ id: "A|1|8000" + n + "|2026-01", monatsId: "A|1|2026-01", eingang: "2026-01", artikel: "A", lieferantId: "1" }));
+  const res = auswerten(liste, { "A|1|2026-01": { ergebnis: "OK" } }).lieferungen;
+  assert.ok(res.every((l) => l.auswertung.status === STATUS.OK));
 });

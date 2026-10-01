@@ -3,8 +3,8 @@
 //   node server.js
 //
 // - liest die Excel-Liste "Lieferungen zu Vogt" (Pivot aus dem BI) neu ein, sobald sie sich ändert
-// - speichert Rückmeldungen von Vogt (i.O. / Abweichung) zentral in data/rueckmeldungen.json
-//   und Artikel-Einstellungen in data/artikel.json, damit alle denselben Stand sehen
+// - speichert Rückmeldungen von Vogt (i.O. / Abweichung) zentral in data/rueckmeldungen.json,
+//   damit alle denselben Stand sehen
 //
 // Einstellungen über Umgebungsvariablen:
 //   PORT   Port (Standard 8080)
@@ -19,7 +19,6 @@ const PORT = Number(process.env.PORT) || 8080;
 const ROOT = __dirname;
 const LISTE = process.env.LISTE || path.join(ROOT, "data", "Lieferungen_zu_Vogt.xlsx");
 const RUECKMELDUNGEN = path.join(ROOT, "data", "rueckmeldungen.json");
-const ARTIKEL = path.join(ROOT, "data", "artikel.json");
 
 const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".json": "application/json; charset=utf-8" };
 const STATISCH = new Set(["/index.html", "/app.js", "/regeln.js"]);
@@ -65,7 +64,7 @@ const server = http.createServer(async (req, res) => {
   try {
     if (url.pathname === "/api/daten" && req.method === "GET") {
       const liste = listeLesen();
-      return json(res, 200, { lieferungen: liste.daten, rueckmeldungen: jsonLesen(RUECKMELDUNGEN), artikel: jsonLesen(ARTIKEL), listeStand: liste.stand });
+      return json(res, 200, { lieferungen: liste.daten, rueckmeldungen: jsonLesen(RUECKMELDUNGEN), listeStand: liste.stand });
     }
 
     if (url.pathname === "/api/rueckmeldung" && req.method === "POST") {
@@ -83,16 +82,6 @@ const server = http.createServer(async (req, res) => {
       }
       jsonSchreiben(RUECKMELDUNGEN, alle);
       return json(res, 200, { ok: true, rueckmeldung: alle[b.id] || null });
-    }
-
-    if (url.pathname === "/api/artikel" && req.method === "POST") {
-      const b = await body(req);
-      if (!b.schluessel) return json(res, 400, { fehler: "schluessel nötig" });
-      const alle = jsonLesen(ARTIKEL);
-      if (b.ausgenommen) alle[b.schluessel] = { ausgenommen: true, grund: String(b.grund || "").slice(0, 500), erfasstVon: String(b.erfasstVon || "").slice(0, 100), datum: new Date().toISOString() };
-      else delete alle[b.schluessel];
-      jsonSchreiben(ARTIKEL, alle);
-      return json(res, 200, { ok: true });
     }
 
     const datei = url.pathname === "/" ? "/index.html" : url.pathname;

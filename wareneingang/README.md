@@ -16,7 +16,6 @@ Benötigt wird nur Node.js (ab Version 18), keine weiteren Pakete.
    - grün → i.O., rot → Abweichung (über 0.002 mm), gelb → nicht zu Vogt
    - die Tabelle „Massabweichung“ unter der Pivot → Details zur Abweichung
    - Kommentare an den ✓ → Bemerkung
-   - Artikel, bei denen alle Lieferungen gelb sind → „nicht messpflichtig“ (im Dashboard änderbar)
 3. Server starten:
    ```
    set LISTE=P:\Qualität\Lieferungen_zu_Vogt.xlsx
@@ -31,17 +30,23 @@ Benötigt wird nur Node.js (ab Version 18), keine weiteren Pakete.
 
 ## Aktualisierung
 
-Der Server liest die Excel-Datei neu ein, sobald sie sich geändert hat. Die Seite fragt jede Minute nach. Neue ✓ erscheinen also, sobald jemand die Liste aktualisiert und **speichert**. Damit das ohne Zutun passiert, sollte die Liste automatisch aktualisiert und gespeichert werden, z. B. stündlich über die Windows-Aufgabenplanung oder Power Automate.
+Die Excel-Liste aktualisiert sich beim Öffnen selbst aus dem BI. Sobald sie danach **gespeichert** wird, liest der Server sie neu ein. Die Seite fragt jede Minute nach, neue ✓ erscheinen also kurz nach dem Speichern.
 
-Ergebnisse (bei Vogt abgegeben, i.O., ausserhalb Toleranz, ging nicht zu Vogt) und die Einstellung „nicht messpflichtig“ liegen zentral in `data/rueckmeldungen.json` und `data/artikel.json`. Diese Dateien bitte sichern. Sie gehören nicht ins Git, weil sie Firmendaten enthalten.
+Die Ergebnisse (bei Vogt abgegeben, i.O., ausserhalb Toleranz, ging nicht zu Vogt) liegen zentral in `data/rueckmeldungen.json`. Diese Datei bitte sichern. Sie gehört nicht ins Git, weil sie Firmendaten enthält.
 
-## Genauigkeit pro Bestellung
+## Zählung pro Bestellung
 
-Die Pivot zeigt ein ✓ pro Monat. Kommen in einem Monat zwei Lieferungen desselben Artikels, zählen sie als eine. Für eine Zählung pro Bestellung kann man in der Pivot das Feld **„Bestell-Nr. - Position“** (Dimension *Purchase Orders*) zusätzlich als Zeilenfeld einblenden. Das Dashboard erkennt die Spalte automatisch und zählt dann jede Bestellposition einzeln. In diesem Fall den Altbestand-Import erneut prüfen.
+Ohne weitere Einstellung zeigt die Pivot ein ✓ pro Monat. Zwei Lieferungen im selben Monat zählen dann als eine. Damit jede Bestellung einzeln zählt, in Excel einmalig:
+
+1. In die Pivot klicken, dann rechts in der Feldliste unter **Purchase Orders** das Feld **„Bestell-Nr. - Position“** suchen.
+2. Es in den Bereich **Zeilen** ziehen, und zwar ganz nach unten, unter „Lieferant Bez.“.
+3. Speichern.
+
+Das Dashboard erkennt die neue Spalte automatisch. Bereits erfasste Ergebnisse pro Monat gelten dann für alle Bestellungen dieses Monats. Neue Ergebnisse werden pro Bestellung erfasst. Wichtig: Unter der Pivot steht die Tabelle „Massabweichung“. Die Pivot wird nicht breiter, aber länger. Steht die Tabelle direkt darunter, meldet Excel beim Aktualisieren einen Konflikt. Die Tabelle deshalb vorher auf ein eigenes Blatt verschieben oder löschen, die Abweichungen sind nach dem Import im Dashboard.
 
 ## Regeln (pro Artikel + Lieferant)
 
-1. Qualifizierung: jede Lieferung geht zu Vogt, bis 3 Messungen in Folge i.O. sind.
+1. Qualifizierung: jede Lieferung geht zu Vogt, bis 3 Messungen in Folge i.O. sind. Wurde ein Artikel noch nie bei Vogt gemessen, muss die nächste Lieferung zu Vogt.
 2. 3 Lieferungen mit Freipass.
 3. Die 4. Lieferung geht zur Kontrollmessung zu Vogt. Ist sie i.O., folgen nochmals 3 Freipässe.
 4. Danach folgt die Requalifizierung. Ist sie i.O., geht es wieder bei Schritt 2 weiter.
