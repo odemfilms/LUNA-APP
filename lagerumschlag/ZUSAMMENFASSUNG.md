@@ -39,18 +39,22 @@ Spalte G «Bestandsmenge» ist bei **711 von 1'464 Artikeln negativ**, und zwar 
 - **Neu: Ist-Bestand = Jahresanfang 2025 + G** (Parameter B20). Dazu **272 KTL/PAL-Artikel ergänzt**, die Bestand im Artikelstamm (23.06.2026) haben, aber im Kennzahlen-Auszug fehlen. Lift 1: Bestand aus Liftbericht.
 - **Lagerwert im Tool: 3.45 Mio. CHF** (Vorgabe aus dem ERP ≈ 3.6 Mio.; Rest v. a. Mietgeräte, Berufskleidung, Entsorgen – nicht im Lift).
 
-## Szenarien (Füllgrad in Tablaren, je Lift 50)
+## Füllgrad über Lifthöhe + Lifte gemischt (05.10.2026)
+- Rechenweg wie Lagerplanung (Tabelle am Ende der Gebindeliste): Tablare = Gebinde / Gebinde je Tablar (S21 280, S22 140, S32 104, S33/S41 52, S51/S52 26, S61–S63 12, S71–S73 6, S81–S83 4). Jedes Tablar braucht **Gebindehöhe + 35 mm** (S21–S51 120 mm, S52/S62 210, S61 110, S63 310, S71/S81 200, S72/S82 400, S73/S83 600). **Füllgrad = Summe Höhe / 11'900 mm je Lift.**
+- **Alle 3 Lifte gemischt** (Parameter E27 = Ja): «Passt?» und Aussenlager über die Summe aller 3 Lifte (35'700 mm). Lift 1 heute aus Liftbericht (85 % = 10'115 mm).
+- Kontrolle Lagerplanung: 104 Tablare / 24'700 mm (Gebinde-Artikel) + Lift 1 heute 10'115 mm = 34'815 mm = 98 % → passt. Tool (Ist, inkl. lose Artikel geschätzt): 32'898 mm = **92 % → passt**.
 
-| | Lift 1 | Lift 2 | Lift 3 | 2+3 | Total | Passt? | Aussenlager |
-|---|---|---|---|---|---|---|---|
-| Ist | 108 % | 133 % | 60 % | 97 % | 101 % | NEIN (Lift 1) | 4 Tablare |
-| B · LU 2 | 141 % | 181 % | 71 % | 126 % | 131 % | NEIN | 46 Tablare |
-| C · LU 2 | 142 % | 206 % | 78 % | 142 % | 142 % | NEIN | 63 Tablare |
-| B · LU 3 | 128 % | 163 % | 69 % | 116 % | 120 % | NEIN | 30 Tablare |
-| C · LU 3 | 129 % | 190 % | 76 % | 133 % | 132 % | NEIN | 48 Tablare |
+## Szenarien (Füllgrad Lifthöhe, Lifte gemischt)
 
-- Schon der **heutige Bestand** passt knapp nicht: Lift 1 (alle «Kardex Schwer»-Artikel) 108 %, Lift 2 + 3 zusammen 97 % (nur mit Ausgleich Lift 2 → 3).
-- Mit Ziel-LU (MAX inkl. MB + ganze Losgrösse) braucht es 30–63 Tablare zusätzlich bzw. Aussenlager.
+| | Lift 1 | Lift 2 | Lift 3 | Total | Passt? | Aussenlager |
+|---|---|---|---|---|---|---|
+| Ist | 107 % | 123 % | 46 % | **92 %** | **JA** (2'800 mm frei ≈ 12 Tablare) | 0 |
+| B · LU 2 | 139 % | 160 % | 53 % | 117 % | NEIN | 6'229 mm ≈ 27 Tablare |
+| B · LU 3 | 127 % | 144 % | 52 % | 108 % | NEIN | 2'744 mm ≈ 12 Tablare |
+| C · LU 2 | 140 % | 184 % | 59 % | 128 % | NEIN | 9'883 mm ≈ 42 Tablare |
+| C · LU 3 | 128 % | 170 % | 58 % | 118 % | NEIN | 6'558 mm ≈ 28 Tablare |
+
+Die einzelnen Lift-% zeigen die Zuordnung nach «Lager in Zukunft»; gemischt wird Lift 3 mit Ware aus Lift 1/2 aufgefüllt. Variante B passt erst bei LU 6 knapp nicht (101 %).
 
 ## Annahmen
 1. Lose Artikel: Tablar-Anteil je Artikel KTL 0.03, PAL 0.15, LIFT1 1.0, andere 0.15. In Lift 2 sind rund 35 % (Ist) bis 40 % (C · LU 2) der Tablare geschätzt (Cockpit Zeilen 33–37).
@@ -71,7 +75,7 @@ Spalte G «Bestandsmenge» ist bei **711 von 1'464 Artikeln negativ**, und zwar 
 - Höhe: «max. Ladehöhe je Tablar» ist leer. Sobald sie eingetragen ist, erscheint bei zu hohen Gebinden der Hinweis «zu hoch für Tablar».
 
 ## Prüfung
-- LibreOffice-Neuberechnung: 97'218 Formeln, 0 Fehler. Regler-Tests erneut bestanden.
+- LibreOffice-Neuberechnung: 104'570 Formeln, 0 Fehler. Regler-Tests bestanden. Regler-Tests erneut bestanden.
 - LU 2 → 3 senkt die Auslastung in B und C. Variante A bleibt unabhängig vom LU. C ≥ B und C ≥ Ist gilt bei jedem Artikel.
 - Ansicht 2/3 im Cockpit = Szenario-Zeile C·LU2 / C·LU3.
 - 5 Handrechnungen stimmen: 101749 (Lift 1, lose), 100058 (Lift 2, S71, ohne Ist), 107997 (Lift 3, S51), 002049 (lose PAL), 005101 (kein Verbrauch).
