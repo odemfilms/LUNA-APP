@@ -4,6 +4,7 @@ build_tool.py - erzeugt / aktualisiert das Excel-Tool «Lagerumschlag_Tool.xlsx�
 
 Aufruf:   python build_tool.py            (Datenbericht + Tool bauen; Excel rechnet beim Öffnen)
           python build_tool.py --bericht  (nur Datenbericht Schritt 1)
+          python build_tool.py --berechnen (Werte mit LibreOffice berechnen und speichern; braucht RECALC_SCRIPT)
           python build_tool.py --pruefen  (zusätzlich Kopie mit LibreOffice berechnen, Formelfehler prüfen;
                                            braucht RECALC_SCRIPT=Pfad/zu/recalc.py)
 Benötigt: Python 3, pandas, numpy, openpyxl.
@@ -1169,6 +1170,13 @@ def main():
     print(f"Gespeichert: {OUTPUT_FILE}")
     if "--pruefen" in sys.argv:
         pruefen(OUTPUT_FILE)
+    if "--berechnen" in sys.argv:  # Werte mit LibreOffice berechnen und in der Datei speichern
+        if RECALC_SCRIPT and os.path.exists(RECALC_SCRIPT):
+            out = subprocess.run([sys.executable, RECALC_SCRIPT, OUTPUT_FILE, "600"], capture_output=True, text=True,
+                                 cwd=os.path.dirname(RECALC_SCRIPT))
+            print(out.stdout[-1500:])
+        else:
+            print("--berechnen: RECALC_SCRIPT nicht gesetzt – Excel berechnet beim Öffnen (ggf. F9 drücken).")
 
 
 if __name__ == "__main__":
