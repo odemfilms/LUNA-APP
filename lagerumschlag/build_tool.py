@@ -41,7 +41,8 @@ TOOL_FILE = os.path.join(HERE, "Lagerumschlag_Tool.xlsx")      # bestehendes Too
 OUTPUT_FILE = os.path.join(HERE, "Lagerumschlag_Tool.xlsx")
 # Liftberichte (Modula «Artikelbestand für Maschine», .prnx) – alle Dateien im Ordner input
 LIFT_REPORTS = sorted(glob.glob(os.path.join(HERE, "input", "*.prnx")))
-MASCHINE_ZU_LIFT = {"1": 1, "2": 2, "3": 3}                  # Maschinen-Nr. im Bericht -> Lift
+MASCHINE_ZU_LIFT = {"1": 1, "2": 2, "3": 3}
+ERGAENZEN_HL = ("KTL", "PAL")   # Artikel dieser Hauptlager mit Bestand im Artikelstamm, aber nicht im Kennzahlen-Auszug -> ergänzen                  # Maschinen-Nr. im Bericht -> Lift
 N_NEW = 100                                                  # reservierte Zeilen für neue Artikel
 RECALC_SCRIPT = os.environ.get("RECALC_SCRIPT", "")          # optional für --pruefen
 
@@ -208,6 +209,7 @@ def load_data():
         d["bem"] = bem
         d["hl"] = txt(r.get("Hauptlager"))
         d["liz"] = txt(r.get("Lager in Zukunft"))
+        d["bestand"] = num(r.get("Bestand"))
         d.update(bez=txt(r.get("Bezeichnung")), preis=num(r.get("Preis-GLD-Akt")), lg=num(r.get("Losgröße")),
                  status=txt(r.get("Artikelstat.")), wbz=num(r.get("Wbz."), None))
         stamm[n] = d
@@ -236,6 +238,18 @@ def load_data():
             mb=num(mb), lg=num(r[3]), wbz=num(r[10], None), geb=st.get("geb") or "LOSE", mpg=st.get("mpg") or None,
             bem=st.get("bem", ""), liz=st.get("liz", ""), ursache=txt(r[41]), aktion=txt(r[42]), xrow=hdr + 2 + i,
         ))
+    # --- Artikel mit Bestand im Artikelstamm, die im Kennzahlen-Auszug fehlen (nur KTL/PAL) ---
+    in_k = {a["nr"] for a in arts}
+    for n, st in stamm.items():
+        if n in in_k or st.get("hl") not in ERGAENZEN_HL or num(st.get("bestand")) <= 0:
+            continue
+        m = mbmap.get(n, {})
+        arts.append(dict(nr=n, bez=st.get("bez", ""), status=st.get("status", ""), hl=st["hl"], abc="", preis=st.get("preis", 0.0),
+                         bm=st["bestand"], ja=0.0, bwx=0.0, verbx=verb.get(n, 0.0), avg=None, lu_ist=None,
+                         mb=m.get(st["hl"], max(m.values()) if m else 0.0), lg=st.get("lg", 0.0), wbz=st.get("wbz"),
+                         geb=st.get("geb") or "LOSE", mpg=st.get("mpg") or None,
+                         bem="; ".join(v for v in ["nur im Artikelstamm (Bestand 23.06.2026)", st.get("bem", "")] if v),
+                         liz=st.get("liz", ""), ursache="", aktion="", xrow=None, ergaenzt=1))
     # --- Liftberichte -------------------------------------------------------
     lift_rows = []
     for f in LIFT_REPORTS:
@@ -405,7 +419,7 @@ PARAM_HL_DEFAULT = [  # Hauptlager, Liftgruppe, Tablare je loser Artikel (Startw
     ("BEKLEI", "Nein", 0.15), ("GK", "Nein", 0.15), ("VERPAC", "Nein", 0.15), ("GERAET", "Nein", 0.15),
     ("ENTSORGEN!", "Nein", 0.15), ("DUMMY", "Nein", 0.15), ("(leer)", "Nein", 0.15),
 ]
-TOOL_VERSION = "v2-tablare"
+TOOL_VERSION = "v3-bestand"
 LIZ_DEFAULT = [  # «Lager in Zukunft» (Artikelstamm) -> Lift
     ("Kardex Schwer", 1), ("Kardex Kleinteil", "2+3"), ("PAL", "Nein"), ("Nicht NLZ", "Nein"), ("SVC Verpackung", "Nein"),
     ("Verpackungsmaterial", "Nein"), ("Kisten Leer", "Nein"), ("Steuerschrank & Gestell", "Nein"), ("Kompressor", "Nein"),
@@ -437,9 +451,11 @@ def build(D, old):
     wsL = wb.create_sheet("Liftbericht")
     wsI = wb.create_sheet("Anleitung")
     oldP = dict((old or {}).get("Parameter", {}))
-    if (old or {}).get("version") != TOOL_VERSION:  # Startwerte lose waren früher m² -> nicht übernehmen
+    if (old or {}).get("version") not in ("v2-tablare", TOOL_VERSION):  # Startwerte lose waren früher m² -> nicht übernehmen
         for r in range(HL_FIRST, HL_LAST + 1):
             oldP.pop(f"C{r}", None)
+    if (old or {}).get("version") != TOOL_VERSION:  # ab v3: Ist-Bestand = Jahresanfang 2025 + Bewegung
+        oldP.pop("B20", None)
     oldC = (old or {}).get("Cockpit", {})
 
     def pin(ws, ref, default, oldd, **kw):
@@ -528,7 +544,7 @@ def build(D, old):
     ws.add_data_validation(dv)
     dv.add(f"J{LIZ_FIRST}:J{LIZ_LAST}")
     put(ws, "A20", "Ist-Bestand aus", bold=True, size=11)
-    pin(ws, "B20", IST_MODES[0], oldP)
+    pin(ws, "B20", IST_MODES[1], oldP)
     dv = DataValidation(type="list", formula1='"' + ",".join(IST_MODES) + '"', allow_blank=False)
     ws.add_data_validation(dv)
     dv.add("B20")
@@ -628,6 +644,7 @@ def build(D, old):
     put(ws, "I16", "Artikel im Tool (ohne neue)")
     put(ws, "I17", "Artikel im Liftbericht / davon nicht im Kennzahlen-Auszug")
     put(ws, "I18", "Ist-Belegung Lift 1 lt. Tool (Kontrolle gegen L5)")
+    put(ws, "I19", "Ergänzt aus Artikelstamm (Bestand, nicht im Kennzahlen-Auszug)")
     # Formeln dafür weiter unten (Spaltenbuchstaben nötig)
     ws.column_dimensions["A"].width = 16
     for c, w in zip("BCDEFGHIJKL", (22, 28, 24, 10, 11, 11, 11, 14, 11, 11, 14)):
@@ -938,6 +955,7 @@ def build(D, old):
     put(wsP, "M16", f'=COUNTIFS({RG("neu")},0)', fmt="0")
     put(wsP, "M17", f'=COUNT({RG("liftr")})&" / "&COUNTIFS({RG("liftr")},">0",{RG("bem")},"nur im Liftbericht*")')
     put(wsP, "M18", "=Szenarien!C5", fmt="0%")
+    put(wsP, "M19", f'=COUNTIFS({RG("bem")},"nur im Artikelstamm*")', fmt="0")
     wsP.column_dimensions["M"].width = 14
 
     # ------------------------------------------------------------------ Cockpit
@@ -1251,8 +1269,8 @@ def build(D, old):
         ("Kein Verbrauch · Lose – Fläche geschätzt · Überbestand (Ist > MAX B, Menge und CHF, LU Ansicht 2) · MAX < MB+LG (MAX final zu tief) · zu hoch für Tablar (Gebindehöhe > max. Ladehöhe) · "
          "manuell übersteuert · Neu · negativer Bestand (Export, als 0 gerechnet) · Gebinde unbekannt · + Bemerkungen aus dem Artikelstamm.", ""),
         ("Annahmen", "b"),
-        ("1. Ist-Bestand = Spalte G «Bestandsmenge» des Kennzahlen-Auszugs, negativ = 0. ACHTUNG: G sieht nach Netto-Bewegung seit 01.01.2025 aus (fast die Hälfte negativ; "
-         "Jahresanfang 2025 + G ist nie negativ). Umschaltbar in Parameter B20.", ""),
+        ("1. Ist-Bestand = Jahresanfangsbestand 2025 (Spalte T) + Spalte G «Bestandsmenge» (= Bewegung seit 01.01.2025). KTL/PAL-Artikel mit Bestand, die im "
+         "Kennzahlen-Auszug fehlen, sind aus dem Artikelstamm ergänzt (Bestand 23.06.2026). Lagerwert ≈ 3.55 Mio. CHF. Lift 1: Bestand aus Liftbericht. Umschaltbar in Parameter B20.", ""),
         ("2. Verbrauch = Pivot «Auswertung Verbrauch» Spalte C (Kalenderjahr 2025), negativ = 0; fehlt ein Artikel dort, Spalte Y «Wareneinsatz».", ""),
         ("3. MB = Spalte AK; wenn leer, Blatt «Auswertung MB» (Lager = Hauptlager). Losgrösse = Spalte D.", ""),
         ("4. Gebinde aus «Artikelstamm Umschlag 2», sonst «Artikelstamm mit Verbrauch»; ohne Gebinde = LOSE. Menge pro Gebinde fehlt → ganzer Ist-Bestand = 1 Gebinde.", ""),

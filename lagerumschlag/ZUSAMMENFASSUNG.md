@@ -34,22 +34,23 @@ Spalte G «Bestandsmenge» ist bei **711 von 1'464 Artikeln negativ**, und zwar 
 - **Nicht stapeln:** Lagen = 1 für alle Gebinde.
 - **Lose Artikel grob geschätzt** (Spalte «Schätzklasse lose», Vorschlag aus der Bezeichnung, änderbar): Klein = Eurobox S51 à 20 Stk, Mittel = Eurobox S61 à 4 Stk, Gross = Trennblech S81 à 2 Stk (Parameter I27:K29). Mindestens der Ist-Bestand bzw. eine Losgrösse passt in 1 Gebinde.
 
+## Ist-Bestand korrigiert (05.10.2026)
+- Spalte G «Bestandsmenge» im Kennzahlen-Auszug ist die Bewegung seit 01.01.2025, nicht der Bestand → Tool zeigte nur ≈ 1.4–1.6 Mio. CHF.
+- **Neu: Ist-Bestand = Jahresanfang 2025 + G** (Parameter B20). Dazu **272 KTL/PAL-Artikel ergänzt**, die Bestand im Artikelstamm (23.06.2026) haben, aber im Kennzahlen-Auszug fehlen. Lift 1: Bestand aus Liftbericht.
+- **Lagerwert im Tool: 3.45 Mio. CHF** (Vorgabe aus dem ERP ≈ 3.6 Mio.; Rest v. a. Mietgeräte, Berufskleidung, Entsorgen – nicht im Lift).
+
 ## Szenarien (Füllgrad in Tablaren, je Lift 50)
-Standard (Liftbericht Lift 1, übrige Artikel Ist = Export G):
 
 | | Lift 1 | Lift 2 | Lift 3 | 2+3 | Total | Passt? | Aussenlager |
 |---|---|---|---|---|---|---|---|
-| Ist | 97 % | 48 % | 23 % | 36 % | 56 % | JA | 0 Tablare |
-| B · LU 2 | 140 % | 171 % | 62 % | 117 % | 124 % | NEIN | 36 Tablare |
-| C · LU 2 | 140 % | 178 % | 64 % | 121 % | 127 % | NEIN | 40 Tablare |
-| B · LU 3 | 127 % | 152 % | 60 % | 106 % | 113 % | NEIN | 19 Tablare |
-| C · LU 3 | 127 % | 158 % | 61 % | 110 % | 116 % | NEIN | 23 Tablare |
+| Ist | 108 % | 133 % | 60 % | 97 % | 101 % | NEIN (Lift 1) | 4 Tablare |
+| B · LU 2 | 141 % | 181 % | 71 % | 126 % | 131 % | NEIN | 46 Tablare |
+| C · LU 2 | 142 % | 206 % | 78 % | 142 % | 142 % | NEIN | 63 Tablare |
+| B · LU 3 | 128 % | 163 % | 69 % | 116 % | 120 % | NEIN | 30 Tablare |
+| C · LU 3 | 129 % | 190 % | 76 % | 133 % | 132 % | NEIN | 48 Tablare |
 
-Mit Ist = Jahresanfang 2025 + G: Ist 107 % / 111 % / 51 % (Lift 1 knapp zu voll), C · LU 2 141 % / 183 % / 68 %.
-
-- **Lift 1** ist heute zu 85 % belegt; kommen alle «Kardex Schwer»-Artikel dazu, sind es 97 %. Mit Ziel-LU wird er zum Engpass (MAX > Fach-Kapazität bei Austrittsdüsen, Federhängern, Trennblech-Artikeln).
-- **Lift 2** ist der zweite Engpass: Trennbleche S71 (≈ 23 Tablare bei C · LU 2), lose Artikel (≈ 38, grob geschätzt), Euroboxen S61–S63 (≈ 21).
-- **Lift 3** hat Reserve (61–64 %). Ausgleich Lift 2 ↔ 3 möglich, reicht aber nicht ganz.
+- Schon der **heutige Bestand** passt knapp nicht: Lift 1 (alle «Kardex Schwer»-Artikel) 108 %, Lift 2 + 3 zusammen 97 % (nur mit Ausgleich Lift 2 → 3).
+- Mit Ziel-LU (MAX inkl. MB + ganze Losgrösse) braucht es 30–63 Tablare zusätzlich bzw. Aussenlager.
 
 ## Annahmen
 1. Lose Artikel: Tablar-Anteil je Artikel KTL 0.03, PAL 0.15, LIFT1 1.0, andere 0.15. In Lift 2 sind rund 35 % (Ist) bis 40 % (C · LU 2) der Tablare geschätzt (Cockpit Zeilen 33–37).
@@ -70,7 +71,7 @@ Mit Ist = Jahresanfang 2025 + G: Ist 107 % / 111 % / 51 % (Lift 1 knapp zu voll)
 - Höhe: «max. Ladehöhe je Tablar» ist leer. Sobald sie eingetragen ist, erscheint bei zu hohen Gebinden der Hinweis «zu hoch für Tablar».
 
 ## Prüfung
-- LibreOffice-Neuberechnung: 83'333 Formeln, 0 Fehler. Regler-Tests erneut bestanden.
+- LibreOffice-Neuberechnung: 97'218 Formeln, 0 Fehler. Regler-Tests erneut bestanden.
 - LU 2 → 3 senkt die Auslastung in B und C. Variante A bleibt unabhängig vom LU. C ≥ B und C ≥ Ist gilt bei jedem Artikel.
 - Ansicht 2/3 im Cockpit = Szenario-Zeile C·LU2 / C·LU3.
 - 5 Handrechnungen stimmen: 101749 (Lift 1, lose), 100058 (Lift 2, S71, ohne Ist), 107997 (Lift 3, S51), 002049 (lose PAL), 005101 (kein Verbrauch).
