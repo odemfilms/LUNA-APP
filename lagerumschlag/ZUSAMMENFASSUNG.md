@@ -29,28 +29,27 @@ Spalte G «Bestandsmenge» ist bei **711 von 1'464 Artikeln negativ**, und zwar 
 - Gebinde je Tablar (Standard): S21 414 · S22 198 · S32 132 · S33 66 · S41 52 · S51/S52 26 · S61–S63 12 · S71–S73 6 · S81–S83 3 · P20–P25 3.
 - **Neue Optionen:** Tablar-Ausnutzung (Parameter M21, z. B. 90 % = Reserve für Lücken) · Tablarmass von Lift 1/2/3 (M22) · im Blatt «Gebinde-Kategorie» je Gebinde Stellmass, Lagen (stapeln) und manuelle Anzahl je Tablar · lose Artikel als Tablar-Anteil je Hauptlager (KTL 0.03, PAL 0.15, LIFT1 1.0).
 
-## Szenarien (Füllgrad Lift 1 / Lift 2 / Lift 3 / Lift 2+3 / Total, in Tablaren)
-Mit Liftbericht, übrige Artikel Ist-Bestand = Export G (Standard):
+## Lager in Zukunft + grobe Schätzung loser Artikel (05.10.2026)
+- **Lift-Zuordnung nach Spalte «Lager in Zukunft»** der neuen Liste (Parameter I34, Schalter B19): Kardex Schwer → Lift 1 (73 Artikel), Kardex Kleinteil → Lift 2/3 nach Gebinde, PAL / Nicht NLZ / SVC Verpackung / Verpackungsmaterial / Kisten Leer / Steuerschrank & Gestell / Kompressor → nicht im Lift. Leer → Regel nach Hauptlager. Artikel im Liftbericht bleiben in Lift 1.
+- **Nicht stapeln:** Lagen = 1 für alle Gebinde.
+- **Lose Artikel grob geschätzt** (Spalte «Schätzklasse lose», Vorschlag aus der Bezeichnung, änderbar): Klein = Eurobox S51 à 20 Stk, Mittel = Eurobox S61 à 4 Stk, Gross = Trennblech S81 à 2 Stk (Parameter I27:K29). Mindestens der Ist-Bestand bzw. eine Losgrösse passt in 1 Gebinde.
+
+## Szenarien (Füllgrad in Tablaren, je Lift 50)
+Standard (Liftbericht Lift 1, übrige Artikel Ist = Export G):
 
 | | Lift 1 | Lift 2 | Lift 3 | 2+3 | Total | Passt? | Aussenlager |
 |---|---|---|---|---|---|---|---|
-| Ist | 86 % | 73 % | 19 % | 46 % | 59 % | JA | 0 Tablare |
-| B · LU 2 | 100 % | 223 % | 47 % | 135 % | 123 % | NEIN | 35 Tablare |
-| C · LU 2 | 100 % | 231 % | 48 % | 140 % | 126 % | NEIN | 40 Tablare |
-| B · LU 3 | 94 % | 204 % | 46 % | 125 % | 114 % | NEIN | 25 Tablare |
-| C · LU 3 | 94 % | 212 % | 47 % | 130 % | 118 % | NEIN | 30 Tablare |
+| Ist | 97 % | 48 % | 23 % | 36 % | 56 % | JA | 0 Tablare |
+| B · LU 2 | 140 % | 171 % | 62 % | 117 % | 124 % | NEIN | 36 Tablare |
+| C · LU 2 | 140 % | 178 % | 64 % | 121 % | 127 % | NEIN | 40 Tablare |
+| B · LU 3 | 127 % | 152 % | 60 % | 106 % | 113 % | NEIN | 19 Tablare |
+| C · LU 3 | 127 % | 158 % | 61 % | 110 % | 116 % | NEIN | 23 Tablare |
 
-Mit Liftbericht, übrige Artikel Ist-Bestand = Jahresanfang 2025 + G:
+Mit Ist = Jahresanfang 2025 + G: Ist 107 % / 111 % / 51 % (Lift 1 knapp zu voll), C · LU 2 141 % / 183 % / 68 %.
 
-| | Lift 1 | Lift 2 | Lift 3 | 2+3 | Total | Passt? |
-|---|---|---|---|---|---|---|
-| Ist | 86 % | 154 % | 44 % | 99 % | 95 % | JA (knapp, mit Ausgleich 2↔3) |
-| B · LU 2 | 100 % | 236 % | 47 % | 141 % | 127 % | NEIN |
-| C · LU 2 | 100 % | 259 % | 53 % | 156 % | 137 % | NEIN |
-| B · LU 3 | 94 % | 214 % | 46 % | 130 % | 118 % | NEIN |
-| C · LU 3 | 94 % | 238 % | 52 % | 145 % | 128 % | NEIN |
-
-Engpass ist **Lift 2**. Treiber bei C · LU 2: lose Artikel (≈ 41 Tablare, geschätzt), Trennbleche S71 (≈ 34 Tablare, nur 6 je Tablar), S81 (≈ 12). Lift 3 (Kleinteile-Boxen) bleibt unter 55 %.
+- **Lift 1** ist heute zu 85 % belegt; kommen alle «Kardex Schwer»-Artikel dazu, sind es 97 %. Mit Ziel-LU wird er zum Engpass (MAX > Fach-Kapazität bei Austrittsdüsen, Federhängern, Trennblech-Artikeln).
+- **Lift 2** ist der zweite Engpass: Trennbleche S71 (≈ 23 Tablare bei C · LU 2), lose Artikel (≈ 38, grob geschätzt), Euroboxen S61–S63 (≈ 21).
+- **Lift 3** hat Reserve (61–64 %). Ausgleich Lift 2 ↔ 3 möglich, reicht aber nicht ganz.
 
 ## Annahmen
 1. Lose Artikel: Tablar-Anteil je Artikel KTL 0.03, PAL 0.15, LIFT1 1.0, andere 0.15. In Lift 2 sind rund 35 % (Ist) bis 40 % (C · LU 2) der Tablare geschätzt (Cockpit Zeilen 33–37).
@@ -67,7 +66,7 @@ Engpass ist **Lift 2**. Treiber bei C · LU 2: lose Artikel (≈ 41 Tablare, ges
 - Höhe: «max. Ladehöhe je Tablar» ist leer. Sobald sie eingetragen ist, erscheint bei zu hohen Gebinden der Hinweis «zu hoch für Tablar».
 
 ## Prüfung
-- LibreOffice-Neuberechnung: 80'193 Formeln, 0 Fehler (Tablar-Version). Regler-Tests erneut bestanden.
+- LibreOffice-Neuberechnung: 83'333 Formeln, 0 Fehler. Regler-Tests erneut bestanden.
 - LU 2 → 3 senkt die Auslastung in B und C. Variante A bleibt unabhängig vom LU. C ≥ B und C ≥ Ist gilt bei jedem Artikel.
 - Ansicht 2/3 im Cockpit = Szenario-Zeile C·LU2 / C·LU3.
 - 5 Handrechnungen stimmen: 101749 (Lift 1, lose), 100058 (Lift 2, S71, ohne Ist), 107997 (Lift 3, S51), 002049 (lose PAL), 005101 (kein Verbrauch).

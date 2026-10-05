@@ -207,6 +207,7 @@ def load_data():
             d["geb"], d["mpg"] = g, num(r[col_mpg2], 0)
         d["bem"] = bem
         d["hl"] = txt(r.get("Hauptlager"))
+        d["liz"] = txt(r.get("Lager in Zukunft"))
         d.update(bez=txt(r.get("Bezeichnung")), preis=num(r.get("Preis-GLD-Akt")), lg=num(r.get("Losgröße")),
                  status=txt(r.get("Artikelstat.")), wbz=num(r.get("Wbz."), None))
         stamm[n] = d
@@ -233,7 +234,7 @@ def load_data():
             nr=n, bez=txt(r[1]), status=txt(r[2]), hl=hl, abc=txt(r[14]), preis=num(r[5]),
             bm=num(r[6]), ja=num(r[19]), bwx=num(r[7]), verbx=v, avg=num(r[22], None), lu_ist=num(r[25], None),
             mb=num(mb), lg=num(r[3]), wbz=num(r[10], None), geb=st.get("geb") or "LOSE", mpg=st.get("mpg") or None,
-            bem=st.get("bem", ""), ursache=txt(r[41]), aktion=txt(r[42]), xrow=hdr + 2 + i,
+            bem=st.get("bem", ""), liz=st.get("liz", ""), ursache=txt(r[41]), aktion=txt(r[42]), xrow=hdr + 2 + i,
         ))
     # --- Liftberichte -------------------------------------------------------
     lift_rows = []
@@ -257,11 +258,40 @@ def load_data():
                      verbx=verb.get(x["code"], 0.0), avg=None, lu_ist=None, mb=max(m.values()) if m else 0.0,
                      lg=st.get("lg", 0.0), wbz=st.get("wbz"), geb=st.get("geb") or "LOSE", mpg=st.get("mpg") or None,
                      bem="; ".join(v for v in ["nur im Liftbericht (nicht im Kennzahlen-Auszug)", st.get("bem", "")] if v),
+                     liz=st.get("liz", ""),
                      ursache="", aktion="", xrow=None)
             arts.append(a)
             byn[a["nr"]] = a
         a.update(lift_rep=x["lift"], kap_rep=x["kap"], best_rep=x["bestand"])
     return dict(arts=arts, h4=h4, period=period, gebkat=gebkat, verb=verb, stamm=stamm, lift_rows=lift_rows)
+
+
+# ============================================================================
+# Grobe Schätzung loser Artikel (ohne Gebinde) über Stichworte in der Bezeichnung
+# ============================================================================
+KLASSEN_DEFAULT = [  # Klasse, Schätz-Gebinde, Menge pro Gebinde, Beschreibung
+    ("Klein", "S51", 20, "Schrauben, Muttern, Kabel, Ventile, Sensoren, Etiketten … (Eurobox 400×300, 20 Stk)"),
+    ("Mittel", "S61", 4, "Panels, Gehäuse, Module, Schläuche, Sets, Service-Kits … (Eurobox 600×400, 4 Stk)"),
+    ("Gross", "S81", 2, "Holzkisten, Rahmen, Rohre, Profile, Wagen, Kartons, Füllmaterial … (Trennblech 1200×800, 2 Stk)"),
+]
+KW_KLEIN_STARK = ("schraube", "mutter", "scheibe", "stopfen", "etikett", "beiblatt", "checkliste", "handbuch", "dichtung",
+                  "o-ring", "nippel", "klemme", "hülse", "stift", "feder", "litze", "draht", "bürste", "schlüssel", "sicherung")
+KW_GROSS = ("holzkiste", "kiste", "faltrahmen", "palette", "gestell", "rohr", "profil", "kranbahn", "wagen", "karton",
+            "füllmaterial", "luftpolster", "rohmaterial", "innenbox", "seitenfaltenbeutel", "lagerkasten", "kompressor",
+            "flasche", "behälter", "tank", "ausgleichsvolumen")
+KW_MITTEL = ("panel", "gehäuse", "modul", "block", "schlauch", "set", "kit", "service", "verpackung", "vorwärmer",
+             "zylinder", "strecke", "düse", "schauglas", "blech", "heiz", "pumpe", "motor", "steuerung", "sps")
+
+
+def schaetzklasse(bez, hl):
+    b = (bez or "").lower()
+    if any(k in b for k in KW_KLEIN_STARK) and not any(k in b for k in ("panel", "modul", "kiste")):
+        return "Klein"
+    if any(k in b for k in KW_GROSS) and "rohrbürste" not in b:
+        return "Gross"
+    if any(k in b for k in KW_MITTEL):
+        return "Mittel"
+    return "Klein" if hl == "KTL" else "Mittel"
 
 
 # ============================================================================
@@ -310,7 +340,7 @@ def bericht(D):
 # ============================================================================
 # Bestehende Eingaben lesen
 # ============================================================================
-ART_INPUT_HEADERS = ["Tablare lose (ganzer Bestand)", "Gebindekategorie neu", "Menge pro Gebinde neu",
+ART_INPUT_HEADERS = ["Schätzklasse lose", "Tablare lose (ganzer Bestand)", "Gebindekategorie neu", "Menge pro Gebinde neu",
                      "Lift manuell", "Ziel-LU Artikel", "MAX final", "Kommentar Diskussion"]
 
 
@@ -376,6 +406,12 @@ PARAM_HL_DEFAULT = [  # Hauptlager, Liftgruppe, Tablare je loser Artikel (Startw
     ("ENTSORGEN!", "Nein", 0.15), ("DUMMY", "Nein", 0.15), ("(leer)", "Nein", 0.15),
 ]
 TOOL_VERSION = "v2-tablare"
+LIZ_DEFAULT = [  # «Lager in Zukunft» (Artikelstamm) -> Lift
+    ("Kardex Schwer", 1), ("Kardex Kleinteil", "2+3"), ("PAL", "Nein"), ("Nicht NLZ", "Nein"), ("SVC Verpackung", "Nein"),
+    ("Verpackungsmaterial", "Nein"), ("Kisten Leer", "Nein"), ("Steuerschrank & Gestell", "Nein"), ("Kompressor", "Nein"),
+    ("-", "Nein"),
+]
+LIZ_FIRST, LIZ_LAST = 35, 52
 GEB_LIFT_DEFAULT = [(c, 3) for c in ("S21", "S22", "S32", "S33", "S41", "S51", "S52")] + \
                    [(c, 2) for c in ("S61", "S62", "S63", "S71", "S72", "S73", "S81", "S82", "S83",
                                      "P20", "P21", "P22", "P23", "P24", "P25", "LOSE")]
@@ -467,6 +503,30 @@ def build(D, old):
     put(ws, "B18", "=12/B17", fmt="0.000", border=True)
     put(ws, "C15", f"Export-Filter «Auswertung Verbrauch»!B2 = {D['period']}", italic=True)
 
+    put(ws, "A19", "Lager in Zukunft verwenden", bold=True, size=11)
+    pin(ws, "B19", "Ja", oldP)
+    dv = DataValidation(type="list", formula1='"Ja,Nein"', allow_blank=False)
+    ws.add_data_validation(dv)
+    dv.add("B19")
+    put(ws, "C19", "Ja = Lift nach Spalte «Lager in Zukunft» (Tabelle I34). Leer = Regel nach Hauptlager.", italic=True)
+    put(ws, "I32", "Zuordnung «Lager in Zukunft» → Lift  (1 / 2 / 3 / 2+3 / Nein)", bold=True, size=11)
+    put(ws, "I34", "Lager in Zukunft", bold=True, fill=SUB, border=True)
+    put(ws, "J34", "Lift", bold=True, fill=SUB, border=True)
+    old_liz = {str(oldP[f"I{r}"]): oldP.get(f"J{r}") for r in range(LIZ_FIRST, LIZ_LAST + 1) if oldP.get(f"I{r}")}
+    liz_rows = [(k, old_liz.pop(k, v)) for k, v in LIZ_DEFAULT] + list(old_liz.items())
+    known_liz = {k for k, _ in liz_rows}
+    for a in arts:
+        if a.get("liz") and a["liz"] not in known_liz:
+            liz_rows.append((a["liz"], "Nein"))
+            known_liz.add(a["liz"])
+    for i in range(LIZ_LAST - LIZ_FIRST + 1):
+        r = LIZ_FIRST + i
+        k, v = liz_rows[i] if i < len(liz_rows) else (None, None)
+        put(ws, f"I{r}", k, fill=YELLOW, border=True)
+        put(ws, f"J{r}", v, fill=YELLOW, border=True, align="center")
+    dv = DataValidation(type="list", formula1='"1,2,3,2+3,Nein"', allow_blank=True)
+    ws.add_data_validation(dv)
+    dv.add(f"J{LIZ_FIRST}:J{LIZ_LAST}")
     put(ws, "A20", "Ist-Bestand aus", bold=True, size=11)
     pin(ws, "B20", IST_MODES[0], oldP)
     dv = DataValidation(type="list", formula1='"' + ",".join(IST_MODES) + '"', allow_blank=False)
@@ -546,6 +606,17 @@ def build(D, old):
     ws.add_data_validation(dv)
     dv.add("M22")
     put(ws, "I23", "Stapeln (Lagen je Gebinde) und manuelle Anzahl je Tablar: Blatt «Gebinde-Kategorie»", italic=True)
+    put(ws, "I25", "Grobe Schätzung lose Artikel (ohne Gebinde, KTL/PAL)", bold=True, size=11)
+    for j, h in enumerate(["Klasse", "Schätz-Gebinde", "Menge pro Gebinde", "Typische Artikel"]):
+        put(ws, f"{L(9 + j)}26", h, bold=True, fill=SUB, border=True, wrap=True)
+    for i, (kl, gb, mp, txt_) in enumerate(KLASSEN_DEFAULT):
+        r = 27 + i
+        put(ws, f"I{r}", kl, bold=True, border=True)
+        pin(ws, f"J{r}", gb, oldP)
+        pin(ws, f"K{r}", mp, oldP, fmt="0")
+        put(ws, f"L{r}", txt_, italic=True)
+    put(ws, "I30", "Zuordnung je Artikel: Blatt «Artikel», Spalte «Schätzklasse lose» (Vorschlag aus der Bezeichnung, änderbar). "
+                   "Eigene Werte in «Gebindekategorie neu» oder «Tablare lose» haben Vorrang.", italic=True)
     # Kontrolle
     put(ws, "I10", "Kontrolle Datenstand", bold=True, size=11)
     put(ws, "I11", "H4 «Total Bestandswert» im Export (= SUM(H7:H1440))")
@@ -645,7 +716,7 @@ def build(D, old):
         COLS.append(dict(key=key, header=header, width=width, kind=kind, grp=grp, fmt=fmt))
 
     col("nr", "Artikelnummer", 12); col("bez", "Bezeichnung", 30); col("status", "Status", 6)
-    col("hl", "Hauptlager", 9); col("abc", "ABC", 5); col("preis", "Preis CHF", 9, fmt="#,##0.00")
+    col("hl", "Hauptlager", 9); col("liz", "Lager in Zukunft", 12); col("abc", "ABC", 5); col("preis", "Preis CHF", 9, fmt="#,##0.00")
     col("ist", "Ist-Bestand", 9, "f", fmt="#,##0"); col("istwert", "Ist-Wert CHF", 11, "f", fmt="#,##0")
     col("verb", "Verbrauch 12 Monate", 10, "f", fmt="#,##0"); col("avg", "Ø-Bestand", 9, fmt="#,##0.0")
     col("lu_ist", "IST-LU", 7, fmt="0.00")
@@ -653,6 +724,7 @@ def build(D, old):
     col("geb", "Gebindekategorie", 9); col("mpg", "Menge pro Gebinde", 8, fmt="#,##0")
     col("gpt", "Gebinde je Tablar", 8, "f", fmt="0")
     col("lose_in", "Tablare lose (ganzer Bestand)", 10, "i", fmt="0.00")
+    col("klasse", "Schätzklasse lose", 8, "i")
     col("geb_neu", "Gebindekategorie neu", 9, "i"); col("mpg_neu", "Menge pro Gebinde neu", 9, "i")
     col("liftr", "Lift lt. Liftbericht", 7); col("kapr", "Fach-Kapazität Stk (Liftbericht)", 8, fmt="#,##0")
     col("bestr", "Bestand lt. Liftbericht", 8, fmt="#,##0")
@@ -675,7 +747,7 @@ def build(D, old):
                     ("bwx", "Export Bestandswert (H)", "#,##0.00"), ("verbx", "Verbrauch Export (Zeitraum)", "#,##0"),
                     ("bem", "Bemerkungen Artikelstamm", None), ("neu", "Neu (1/0)", "0"), ("idx", "Zeile", "0"),
                     ("geb_e", "Gebinde wirksam", None), ("mpg_e", "Menge/Gebinde wirksam", "#,##0"),
-                    ("lose", "Lose (1/0)", "0"), ("la", "Tablare lose wirksam", "0.00"), ("lift", "Lift wirksam", None),
+                    ("lose", "Lose (1/0)", "0"), ("est", "Gebinde geschätzt (1/0)", "0"), ("zgrp", "Liftregel (LiZ/Hauptlager)", None), ("la", "Tablare lose wirksam", "0.00"), ("lift", "Lift wirksam", None),
                     ("grp", "Liftgruppe", None), ("luo", "Ziel-LU Artikel (0=keiner)", "0.0"), ("finf", "MAX final gesetzt", "0"),
                     ("finv", "MAX final Wert", "#,##0"), ("mblg", "MB + LG", "#,##0"), ("istn", "Gebinde bei Ist", "#,##0"),
                     ("finn", "Gebinde bei MAX final", "#,##0"), ("hgt", "Gebindehöhe cm", "0"), ("maxh", "max. Ladehöhe Lift mm", "0"),
@@ -699,6 +771,8 @@ def build(D, old):
     CAP1, CAP2, CAP3 = "Parameter!$E$5", "Parameter!$E$6", "Parameter!$E$7"   # Kapazität in Tablaren
     HLT = f"Parameter!$A${HL_FIRST}:$C${HL_LAST}"
     GLT = f"Parameter!$F${GL_FIRST}:$G${GL_LAST}"
+    LIZT = f"Parameter!$I${LIZ_FIRST}:$J${LIZ_LAST}"
+    LIZT_K = f"Parameter!$I${LIZ_FIRST}:$I${LIZ_LAST}"
 
     FORM = {
         "ist": ('=MAX(0,IF(AND(Parameter!$B$21="Ja",ISNUMBER(@bestr@)),@bestr@,'
@@ -706,16 +780,17 @@ def build(D, old):
         "istwert": "=@ist@*@preis@",
         "verb": "=@verbx@*Parameter!$B$18",
         "gpt": f'=IF(@lose@=1,0,IFERROR(VLOOKUP(@geb_e@,{GEB_RNG},13,0)+0,0))',
-        "lift_vor": (f'=IF(@nr@="","",IF(AND(Parameter!$B$21="Ja",ISNUMBER(@liftr@)),@liftr@,IF(IFERROR(VLOOKUP(@hl@,{HLT},2,0),"Nein")="2+3",'
+        "zgrp": (f'=IF(AND(Parameter!$B$19="Ja",@liz@<>"",ISNUMBER(MATCH(@liz@,{LIZT_K},0))),VLOOKUP(@liz@,{LIZT},2,0),'
+                 f'IFERROR(VLOOKUP(@hl@,{HLT},2,0),"Nein"))'),
+        "lift_vor": (f'=IF(@nr@="","",IF(AND(Parameter!$B$21="Ja",ISNUMBER(@liftr@)),@liftr@,IF(@zgrp@="2+3",'
                      f'IF(ISNUMBER(SEARCH("grosser Artikel",@bem@)),2,IFERROR(VLOOKUP(@geb_e@,{GLT},2,0),2)),'
-                     f'IF(OR(IFERROR(VLOOKUP(@hl@,{HLT},2,0),"Nein")="Nein",IFERROR(VLOOKUP(@hl@,{HLT},2,0),"Nein")=""),"-",'
-                     f'VLOOKUP(@hl@,{HLT},2,0)))))'),
+                     f'IF(OR(@zgrp@="Nein",@zgrp@=""),"-",@zgrp@))))'),
         "maxb": "=@b2@",
         "maxc": "=MAX(@b2@,@ist@)",
         "hint": ('=IF(@nr@="","",IF(@neu@=1,"Neu; ","")'
                  '&IF(AND(@neu@=0,@bm@<0),"negativer Bestand (Export "&@bm@&"); ","")'
                  '&IF(@verb@<=0,"Kein Verbrauch; ","")'
-                 '&IF(@fach@>0,"Lift "&@liftr@&" lt. Liftbericht (Fach "&@kapr@&" Stk); ",IF(@lose@=1,"Lose – Fläche geschätzt; ",""))'
+                 '&IF(@fach@>0,"Lift "&@liftr@&" lt. Liftbericht (Fach "&@kapr@&" Stk); ",IF(@est@=1,"Gebinde geschätzt ("&@klasse@&"); ",IF(@lose@=1,"Lose – Tablare geschätzt; ","")))'
                  '&IF(@ist@>@b2@,"Überbestand "&ROUND(@ist@-@b2@,0)&" Stk / CHF "&ROUND((@ist@-@b2@)*@preis@,0)&"; ","")'
                  '&IF(AND(@finf@=1,@finv@<@mblg@),"MAX < MB+LG; ","")'
                  '&IF(AND(@maxh@>0,@hgt@*10>@maxh@),"zu hoch für Tablar; ","")'
@@ -723,8 +798,10 @@ def build(D, old):
                  '&IF(AND(@lose@=0,@gpt@=0),"Gebinde unbekannt / Stellmass fehlt; ","")'
                  '&IF(AND(@lose@=0,N(@mpg_neu@)<=0,N(@mpg@)<=0),"Menge pro Gebinde fehlt (Ist = 1 Gebinde); ","")'
                  '&@bem@)'),
-        "geb_e": '=IF(@geb_neu@<>"",UPPER(TRIM(@geb_neu@)),IF(@geb@="","LOSE",@geb@))',
-        "mpg_e": '=IF(@geb_e@="LOSE",1,IF(N(@mpg_neu@)>0,@mpg_neu@,IF(N(@mpg@)>0,@mpg@,MAX(1,@ist@))))',
+        "est": '=IF(AND(@geb_neu@="",OR(@geb@="",@geb@="LOSE"),@klasse@<>"",N(@lose_in@)<=0,ISNUMBER(MATCH(@klasse@,Parameter!$I$27:$I$29,0))),1,0)',
+        "geb_e": '=IF(@geb_neu@<>"",UPPER(TRIM(@geb_neu@)),IF(@est@=1,UPPER(VLOOKUP(@klasse@,Parameter!$I$27:$K$29,2,0)),IF(@geb@="","LOSE",@geb@)))',
+        "mpg_e": ('=IF(@geb_e@="LOSE",1,IF(N(@mpg_neu@)>0,@mpg_neu@,IF(@est@=1,MAX(1,N(VLOOKUP(@klasse@,Parameter!$I$27:$K$29,3,0)),@ist@,N(@lg@)),'
+                  'IF(N(@mpg@)>0,@mpg@,MAX(1,@ist@)))))'),
         "lose": '=IF(@geb_e@="LOSE",1,0)',
         "la": f'=IF(@lose@=0,0,IF(N(@lose_in@)>0,@lose_in@,IFERROR(VLOOKUP(@hl@,{HLT},3,0)+0,0)))',
         "lift": '=IF(@lift_in@<>"",@lift_in@,@lift_vor@)',
@@ -792,6 +869,9 @@ def build(D, old):
         if kind == "art":
             vals = dict(nr=a["nr"], bez=a["bez"], status=a["status"], hl=a["hl"], abc=a["abc"], preis=a["preis"],
                         avg=a["avg"], lu_ist=a["lu_ist"], mb=a["mb"], lg=a["lg"], wbz=a["wbz"], geb=a["geb"],
+                        liz=a.get("liz") or None,
+                        klasse=(schaetzklasse(a["bez"], a["hl"]) if a["geb"] == "LOSE" and a.get("lift_rep") is None
+                                and (a["hl"] in ("KTL", "PAL") or str(a.get("liz", "")).startswith("Kardex")) else None),
                         mpg=a["mpg"], ursache=a["ursache"] or None, aktion=a["aktion"] or None,
                         bm=a["bm"], ja=a["ja"], bwx=a["bwx"], verbx=a["verbx"], bem=a["bem"], neu=0,
                         liftr=a.get("lift_rep"), kapr=a.get("kap_rep"), bestr=a.get("best_rep"))
@@ -832,6 +912,9 @@ def build(D, old):
     dv = DataValidation(type="list", formula1='"1,2,3,Aussen"', allow_blank=True)
     ws.add_data_validation(dv)
     dv.add(f"{C['lift_in']}{R0}:{C['lift_in']}{R0 + n_art - 1}")
+    dv = DataValidation(type="list", formula1="Parameter!$I$27:$I$29", allow_blank=True)
+    ws.add_data_validation(dv)
+    dv.add(f"{C['klasse']}{R0}:{C['klasse']}{RN}")
     # bedingte Formate
     for v in (1, 2, 3):
         rng = f"{C[f'loc{v}']}{R0}:{C[f'loc{v}']}{RN}"
@@ -949,14 +1032,14 @@ def build(D, old):
         put(ws, f"{c[2]}31", f'=SUMPRODUCT(({A("ist")}>{A(f"b{v}")})*({A("ist")}-{A(f"b{v}")})*{A("preis")})', fmt="#,##0")
         put(ws, f"{c[3]}30", "(LU dieser Ansicht)", italic=True, color="808080")
         # Gebinde vs lose
-        for j, h in enumerate(["Tablare je Lift", "aus Gebinden", "Fächer lt. Liftbericht", "lose (geschätzt)", "Anteil geschätzt"]):
+        for j, h in enumerate(["Tablare je Lift", "aus Gebinden (Stammdaten)", "Fächer lt. Liftbericht", "lose (grob geschätzt)", "Anteil geschätzt"]):
             put(ws, f"{c[j]}33", h, bold=True, fill=SUB, border=True, wrap=True, align="center")
         for i, (lbl, n) in enumerate(lifts_lbl):
             r = 34 + i
             put(ws, f"{c[0]}{r}", lbl, border=True)
-            put(ws, f"{c[1]}{r}", f"=SUMIFS({A(f'a{v}')},{A('lift')},{n},{A('lose')},0,{A('fach')},0)", fmt="#,##0.0", border=True)
+            put(ws, f"{c[1]}{r}", f"=SUMIFS({A(f'a{v}')},{A('lift')},{n},{A('lose')},0,{A('fach')},0,{A('est')},0)", fmt="#,##0.0", border=True)
             put(ws, f"{c[2]}{r}", f'=SUMIFS({A(f"a{v}")},{A("lift")},{n},{A("fach")},">0")', fmt="#,##0.0", border=True)
-            put(ws, f"{c[3]}{r}", f"=SUMIFS({A(f'a{v}')},{A('lift')},{n},{A('lose')},1,{A('fach')},0)", fmt="#,##0.0", border=True)
+            put(ws, f"{c[3]}{r}", f"=SUMIFS({A(f'a{v}')},{A('lift')},{n},{A('lose')},1,{A('fach')},0)+SUMIFS({A(f'a{v}')},{A('lift')},{n},{A('est')},1,{A('fach')},0)", fmt="#,##0.0", border=True)
             put(ws, f"{c[4]}{r}", f"=IF(SUM({c[1]}{r}:{c[3]}{r})>0,{c[3]}{r}/SUM({c[1]}{r}:{c[3]}{r}),0)", fmt="0%", border=True)
         put(ws, f"{c[0]}37", "Total", bold=True, border=True)
         for j in (1, 2, 3):
@@ -1145,6 +1228,9 @@ def build(D, old):
         ("Liftbericht (Modula)", "b"),
         ("Artikel im Liftbericht (input/*.prnx) bekommen dessen Lift und Bestand. Ihr Platz = reserviertes Fach: Die gemessene Belegung (Parameter L5:L7, z. B. Lift 1 = 85 % "
          "der Tablare) wird im Verhältnis der Fach-Kapazität (Stk) auf die Artikel verteilt. In B/C wächst der Bedarf erst, wenn MAX > Fach-Kapazität.", ""),
+        ("Lose Artikel grob geschätzt", "b"),
+        ("Artikel ohne Gebinde (KTL/PAL) bekommen aus der Bezeichnung eine Schätzklasse: Klein = Eurobox S51 à 20 Stk, Mittel = S61 à 4 Stk, Gross = Trennblech S81 à 2 Stk "
+         "(Parameter I27:K29); mindestens der Ist-Bestand bzw. eine Losgrösse passt in 1 Gebinde. Damit rechnen sie wie Gebinde-Artikel. Klasse im Blatt Artikel änderbar; «Gebindekategorie neu» oder «Tablare lose» haben Vorrang. Kein Stapeln.", ""),
         ("Varianten", "b"),
         ("A – Ist-Bestand: heutiger Bestand (unabhängig vom LU).", ""),
         ("B – Ziel-LU: MAX = Jahresverbrauch / Ziel-LU, mindestens MB + Losgrösse, aufgerundet auf ganze Gebinde. Zielzustand nach Abbau des Überbestands.", ""),
@@ -1156,7 +1242,9 @@ def build(D, old):
         ("Füllgrad über Gebinde: Gebinde je Tablar = beste Anordnung des Gebindes (Stellmass, längs/quer) auf dem Tablar × Lagen (Blatt «Gebinde-Kategorie», "
          "manuell überschreibbar). Tablare je Artikel = Anzahl Gebinde / Gebinde je Tablar. Füllgrad = Tablare Bedarf / Tablare vorhanden (Parameter E5:E7). "
          "Tablar-Ausnutzung (Parameter M21) gibt Reserve für Lücken.", ""),
-        ("Zuordnung: LIFT1 → Lift 1. KTL/PAL → Lift 3 (BITO S21–S33, Eurobox S41–S52) oder Lift 2 (S61–S63, Trennbleche S71–S83, lose, «grosser Artikel»). Andere Hauptlager → «Nicht im Lift».", ""),
+        ("Zuordnung zuerst nach «Lager in Zukunft» (Artikelstamm, Parameter I34): Kardex Schwer → Lift 1, Kardex Kleinteil → Lift 2/3 nach Gebinde, "
+         "Verpackung/Leerkisten/PAL/Nicht NLZ → nicht im Lift. Leer → Regel nach Hauptlager: ", ""),
+        ("LIFT1 → Lift 1. KTL/PAL → Lift 3 (BITO S21–S33, Eurobox S41–S52) oder Lift 2 (S61–S63, Trennbleche S71–S83, lose, «grosser Artikel»). Andere Hauptlager → «Nicht im Lift».", ""),
         ("«Passt?» wird für Lift 1 und Lift 2 + 3 gemeinsam beurteilt. Aussenlager: je Liftgruppe Artikel nach Verbrauch pro Tablar sortiert (Schnelldreher zuerst), "
          "Fläche kumuliert; was die Kapazität überschreitet = «Aussenlager», der Artikel an der Grenze = «teilweise».", ""),
         ("Hinweise", "b"),
