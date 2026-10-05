@@ -425,7 +425,7 @@ PARAM_HL_DEFAULT = [  # Hauptlager, Liftgruppe, Tablare je loser Artikel (Startw
     ("BEKLEI", "Nein", 0.15), ("GK", "Nein", 0.15), ("VERPAC", "Nein", 0.15), ("GERAET", "Nein", 0.15),
     ("ENTSORGEN!", "Nein", 0.15), ("DUMMY", "Nein", 0.15), ("(leer)", "Nein", 0.15),
 ]
-TOOL_VERSION = "v3-bestand"
+TOOL_VERSION = "v4-oe"
 LIZ_DEFAULT = [  # «Lager in Zukunft» (Artikelstamm) -> Lift
     ("Kardex Schwer", 1), ("Kardex Kleinteil", "2+3"), ("PAL", "Nein"), ("Nicht NLZ", "Nein"), ("SVC Verpackung", "Nein"),
     ("Verpackungsmaterial", "Nein"), ("Kisten Leer", "Nein"), ("Steuerschrank & Gestell", "Nein"), ("Kompressor", "Nein"),
@@ -435,7 +435,7 @@ LIZ_FIRST, LIZ_LAST = 35, 52
 GEB_LIFT_DEFAULT = [(c, 3) for c in ("S21", "S22", "S32", "S33", "S41", "S51", "S52")] + \
                    [(c, 2) for c in ("S61", "S62", "S63", "S71", "S72", "S73", "S81", "S82", "S83",
                                      "P20", "P21", "P22", "P23", "P24", "P25", "LOSE")]
-LU_LIST = [1, 1.5, 2, 2.5, 3, 4, 5, 6]
+LU_LIST = [2, 2.5, 3, 3.5, 4, 5, 6, 8]
 VARIANTS = ["A – Ist-Bestand", "B – Ziel-LU", "C – Ziel-LU oder Ist"]
 IST_MODES = ["Export (Bestandsmenge)", "Jahresanfang 2025 + Export"]
 HL_FIRST, HL_LAST = 35, 64
@@ -457,12 +457,17 @@ def build(D, old):
     wsL = wb.create_sheet("Liftbericht")
     wsI = wb.create_sheet("Anleitung")
     oldP = dict((old or {}).get("Parameter", {}))
-    if (old or {}).get("version") not in ("v2-tablare", TOOL_VERSION):  # Startwerte lose waren früher m² -> nicht übernehmen
+    if (old or {}).get("version") not in ("v2-tablare", "v3-bestand", TOOL_VERSION):  # Startwerte lose waren früher m² -> nicht übernehmen
         for r in range(HL_FIRST, HL_LAST + 1):
             oldP.pop(f"C{r}", None)
-    if (old or {}).get("version") != TOOL_VERSION:  # ab v3: Ist-Bestand = Jahresanfang 2025 + Bewegung
+    if (old or {}).get("version") not in ("v3-bestand", TOOL_VERSION):  # ab v3: Ist-Bestand = Jahresanfang 2025 + Bewegung
         oldP.pop("B20", None)
-    oldC = (old or {}).get("Cockpit", {})
+    if (old or {}).get("version") != TOOL_VERSION:  # ab v4: neue LU-Liste und Standard-Ansichten
+        for r in range(23, 31):
+            oldP.pop(f"A{r}", None)
+    oldC = dict((old or {}).get("Cockpit", {}))
+    if (old or {}).get("version") != TOOL_VERSION:
+        oldC = {}
 
     def pin(ws, ref, default, oldd, **kw):
         """gelbe Eingabezelle, alter Wert hat Vorrang"""
@@ -638,6 +643,13 @@ def build(D, old):
     ws.add_data_validation(dv)
     dv.add("E27")
     put(ws, "D28", "Ja = Artikel dürfen in jeden Lift; «Passt?» und Aussenlager über die Summe aller 3 Lifte.", italic=True)
+    put(ws, "D30", "Platzbedarf rechnen mit", bold=True)
+    pin(ws, "E30", "Ø-Bestand", oldP)
+    dv = DataValidation(type="list", formula1='"Ø-Bestand,MAX-Bestand"', allow_blank=False)
+    ws.add_data_validation(dv)
+    dv.add("E30")
+    put(ws, "D31", "Ø-Bestand = Material rotiert, nicht alle Artikel gleichzeitig auf MAX (wie Lagerplanung «Max.-Bestand Ergebnis»). "
+                   "MAX-Bestand = fixe Fächer für MB + ganze Bestellmenge.", italic=True)
     put(ws, "I25", "Grobe Schätzung lose Artikel (ohne Gebinde, KTL/PAL)", bold=True, size=11)
     for j, h in enumerate(["Klasse", "Schätz-Gebinde", "Menge pro Gebinde", "Typische Artikel"]):
         put(ws, f"{L(9 + j)}26", h, bold=True, fill=SUB, border=True, wrap=True)
@@ -770,7 +782,7 @@ def build(D, old):
     col("max_fin", "MAX final", 9, "i", fmt="#,##0")
     for v in (1, 2, 3):
         col(f"q{v}", f"A{v} Menge", 9, "f", 1, "#,##0"); col(f"n{v}", f"A{v} Anzahl Gebinde", 8, "f", 1, "#,##0")
-        col(f"tb{v}", f"A{v} Tablare", 8, "f", 1, "0.00"); col(f"a{v}", f"A{v} Höhe mm", 8, "f", 1, "#,##0"); col(f"w{v}", f"A{v} Wert CHF", 10, "f", 1, "#,##0")
+        col(f"tb{v}", f"A{v} Tablare", 8, "f", 1, "0.00"); col(f"a{v}", f"A{v} Höhe mm", 8, "f", 1, "#,##0"); col(f"d{v}", f"A{v} Ø-Bestand", 9, "f", 1, "#,##0.0"); col(f"w{v}", f"A{v} Wert CHF (Ø)", 10, "f", 1, "#,##0")
         col(f"b{v}", f"A{v} MAX B (Hilfe)", 8, "f", 2, "#,##0"); col(f"pr{v}", f"A{v} Priorität Verbr./Tablar (Hilfe)", 9, "f", 2, "#,##0.0")
         col(f"cum{v}", f"A{v} Fläche kumuliert (Hilfe)", 9, "f", 2, "#,##0.0")
         col(f"ant{v}", f"A{v} Anteil im Lift (Hilfe)", 7, "f", 2, "0%")
@@ -785,7 +797,7 @@ def build(D, old):
                     ("geb_e", "Gebinde wirksam", None), ("mpg_e", "Menge/Gebinde wirksam", "#,##0"),
                     ("lose", "Lose (1/0)", "0"), ("est", "Gebinde geschätzt (1/0)", "0"), ("hpt", "Höhe je Tablar mm", "0"), ("zgrp", "Liftregel (LiZ/Hauptlager)", None), ("la", "Tablare lose wirksam", "0.00"), ("lift", "Lift wirksam", None),
                     ("grp", "Liftgruppe", None), ("luo", "Ziel-LU Artikel (0=keiner)", "0.0"), ("finf", "MAX final gesetzt", "0"),
-                    ("finv", "MAX final Wert", "#,##0"), ("mblg", "MB + LG", "#,##0"), ("istn", "Gebinde bei Ist", "#,##0"),
+                    ("finv", "MAX final Wert", "#,##0"), ("mblg", "MB + LG", "#,##0"), ("mbn", "MB (Zahl)", "#,##0"), ("lgn", "LG (Zahl)", "#,##0"), ("istn", "Gebinde bei Ist", "#,##0"),
                     ("finn", "Gebinde bei MAX final", "#,##0"), ("hgt", "Gebindehöhe cm", "0"), ("maxh", "max. Ladehöhe Lift mm", "0"),
                     ("fach", "Fach lt. Liftbericht (Tablare)", "0.00")]:
         col(k, h, 9, "f", 3, f)
@@ -849,6 +861,8 @@ def build(D, old):
         "finf": "=IF(ISNUMBER(@max_fin@),1,0)",
         "finv": "=N(@max_fin@)",
         "mblg": "=N(@mb@)+N(@lg@)",
+        "mbn": "=N(@mb@)",
+        "lgn": "=N(@lg@)",
         "istn": "=ROUNDUP(@ist@/@mpg_e@,0)",
         "finn": "=ROUNDUP(@finv@/@mpg_e@,0)",
         "hgt": f'=IF(@lose@=1,0,IFERROR(VLOOKUP(@geb_e@,{GEB_RNG},5,0)+0,0))',
@@ -860,14 +874,16 @@ def build(D, old):
         var, lu = VAR[v], LUC[v]
         cap = f'IF(@grp@="L1",{CAP1},IF(@grp@="L23",{CAP2}+{CAP3},{CAP1}+{CAP2}+{CAP3}))'
         FORM.update({
-            f"b{v}": f"=ROUNDUP(MAX(@verb@/IF(@luo@>0,@luo@,MAX(0.1,N({lu}))),@mblg@)/@mpg_e@,0)*@mpg_e@",
-            f"q{v}": (f'=IF(LEFT({var},1)="A",@ist@,IF(@finf@=1,@finv@,IF(LEFT({var},1)="B",@b{v}@,MAX(@b{v}@,@ist@))))'),
+            f"b{v}": f"=ROUNDUP(@mbn@+MAX(@lgn@,2*(@verb@/IF(@luo@>0,@luo@,MAX(0.1,N({lu})))-@mbn@)),0)",
+            f"q{v}": (f'=IF(LEFT({var},1)="A",@ist@,IF(Parameter!$E$30="MAX-Bestand",IF(@finf@=1,@finv@,IF(LEFT({var},1)="B",@b{v}@,MAX(@b{v}@,@ist@))),ROUNDUP(@d{v}@,0)))'),
             f"n{v}": f"=IF(@lose@=1,0,ROUNDUP(@q{v}@/@mpg_e@,0))",
             f"a{v}": f"=@tb{v}@*@hpt@",
             f"tb{v}": (f"=IF(@fach@>0,@fach@*MAX(1,@q{v}@/@kapr@),"
                       f"IF(@lose@=1,IF(@q{v}@<=0,0,@la@*MAX(1,IF(@ist@>0,@q{v}@/@ist@,1))),IF(@gpt@>0,@n{v}@/@gpt@,0))"
                       f"/MAX(0.1,N(Parameter!$M$21)))"),
-            f"w{v}": f"=@q{v}@*@preis@",
+            f"d{v}": (f'=IF(LEFT({var},1)="A",@ist@,IF(@finf@=1,(@mbn@+@finv@)/2,'
+                      f'IF(LEFT({var},1)="B",(@mbn@+@b{v}@)/2,MAX((@mbn@+@b{v}@)/2,@ist@))))'),
+            f"w{v}": f"=@d{v}@*@preis@",
             f"pr{v}": f"=IF(@a{v}@>0,@verb@/@a{v}@,-1)",
             f"cum{v}": (f'=IF(AND(OR(@grp@="L1",@grp@="L23",@grp@="LIFT"),@a{v}@>0),SUMIFS(#a{v}#,#grp#,@grp@,#pr{v}#,">"&@pr{v}@)'
                         f'+SUMIFS(#a{v}#,#grp#,@grp@,#pr{v}#,@pr{v}@,#idx#,"<="&@idx@),"")'),
@@ -966,7 +982,7 @@ def build(D, old):
     ws.conditional_formatting.add(hr, FormulaRule(formula=[f'ISNUMBER(SEARCH("Überbestand",{C["hint"]}{R0}))'], fill=ORANGE_F))
 
     # Defined Names (für Szenarien)
-    for k in ("ist", "verb", "mblg", "mpg_e", "gpt", "lose", "la", "luo", "finf", "finv", "lift", "preis", "istn", "finn", "fach", "kapr", "hpt"):
+    for k in ("ist", "verb", "mblg", "mpg_e", "gpt", "lose", "la", "luo", "finf", "finv", "lift", "preis", "istn", "finn", "fach", "kapr", "hpt", "mbn", "lgn"):
         nm = "A_" + k.upper()
         wb.defined_names[nm] = DefinedName(nm, attr_text=f"Artikel!${C[k]}${R0}:${C[k]}${RN}")
 
@@ -985,10 +1001,10 @@ def build(D, old):
     ws = wsC
     put(ws, "B1", "Cockpit – Lagerlift-Belegung & MAX-Bestand nach Lagerumschlag", bold=True, size=16, color="1F3864")
     put(ws, "B2", '="Verbrauchsbasis: "&TEXT(MONTH(Parameter!B15),"00")&"."&YEAR(Parameter!B15)&" – "&TEXT(MONTH(Parameter!B16),"00")&"."&YEAR(Parameter!B16)'
-                  '&"   ·   Ist-Bestand: "&Parameter!B20&"   ·   Kapazität "&TEXT(Parameter!H8,"#,##0")&" mm Lifthöhe (3 × 11 900)"&IF(Parameter!E27="Ja","   ·   Lifte gemischt","")',
+                  '&"   ·   Ist-Bestand: "&Parameter!B20&"   ·   Kapazität "&TEXT(Parameter!H8,"#,##0")&" mm Lifthöhe (3 × 11 900)"&IF(Parameter!E27="Ja","   ·   Lifte gemischt","")&"   ·   IST-LU gesamt "&TEXT(SUMPRODUCT(A_VERB,A_PREIS)/MAX(1,SUMPRODUCT(A_IST,A_PREIS)),"0.0")',
         bold=True, size=11, color="C00000")
     put(ws, "B3", "Gelbe Felder = Regler. Auslastung: grün < 85 %, orange 85–100 %, rot > 100 %.", italic=True, color="595959")
-    defaults = {1: (VARIANTS[0], 2), 2: (VARIANTS[2], 2), 3: (VARIANTS[2], 3)}
+    defaults = {1: (VARIANTS[0], 3), 2: (VARIANTS[2], 3), 3: (VARIANTS[1], 4)}
     dvv = DataValidation(type="list", formula1="Parameter!$D$23:$D$25", allow_blank=False)
     dvl = DataValidation(type="list", formula1="Parameter!$A$23:$A$30", allow_blank=False, showErrorMessage=False)
     ws.add_data_validation(dvv)
@@ -1142,22 +1158,30 @@ def build(D, old):
                 f"+(A_FACH=0)*((1-A_LOSE)*(A_GPT>0)*{G}/(A_GPT+(A_GPT=0))+A_LOSE*({Q}>0)*A_LA*(1+(A_IST>0)*({Q}>A_IST)*({Q}/(A_IST+(A_IST=0))-1)))"
                 f"/MAX(0.1,N(Parameter!$M$21)))")
 
-    def scen_exprs(var, x):
+    def scen_exprs(var, x, mode="AVG"):
+        """liefert (Höhe-Ausdruck, Lagerwert-Menge Ø)"""
         if var == "Ist":
-            G, Q = "A_ISTN", "A_IST"
-            V = "A_IST"
-        else:
-            RAW = f"A_VERB/(A_LUO+(A_LUO=0)*{x})"
-            M = f"({RAW}+(A_MBLG>{RAW})*(A_MBLG-{RAW}))"
-            NB = f"ROUNDUP({M}/A_MPG_E,0)"
-            if var == "B":
+            return area_expr("A_ISTN", "A_IST", "A_IST"), "A_IST"
+        LUE = f"(A_LUO+(A_LUO=0)*{x})"
+        M2 = f"(2*(A_VERB/{LUE}-A_MBN))"
+        QB = f"(A_LGN+({M2}>A_LGN)*({M2}-A_LGN))"            # Bestellmenge = max(LG, 2*(V/LU-MB))
+        MX = f"ROUNDUP(A_MBN+{QB},0)"                            # MAX Stück
+        NB = f"ROUNDUP({MX}/A_MPG_E,0)"
+        AVG = f"((A_MBN+{MX})/2)"
+        if var == "B":
+            W = f"(A_FINF*(A_MBN+A_FINV)/2+(1-A_FINF)*{AVG})"
+            if mode == "MAX":
                 G = f"(A_FINF*A_FINN+(1-A_FINF)*{NB})"
-                V = f"(A_FINF*A_FINV+(1-A_FINF)*{NB}*A_MPG_E)"
-            else:
+                V = f"(A_FINF*A_FINV+(1-A_FINF)*{MX})"
+        else:
+            W = f"(A_FINF*(A_MBN+A_FINV)/2+(1-A_FINF)*({AVG}+(A_IST>{AVG})*(A_IST-{AVG})))"
+            if mode == "MAX":
                 G = f"(A_FINF*A_FINN+(1-A_FINF)*({NB}+(A_ISTN>{NB})*(A_ISTN-{NB})))"
-                V = f"(A_FINF*A_FINV+(1-A_FINF)*({NB}*A_MPG_E+(A_IST>{NB}*A_MPG_E)*(A_IST-{NB}*A_MPG_E)))"
-            Q = G  # lose: Menge pro Gebinde = 1
-        return area_expr(G, Q, V), V
+                V = f"(A_FINF*A_FINV+(1-A_FINF)*({MX}+(A_IST>{MX})*(A_IST-{MX})))"
+        if mode == "AVG":
+            V = f"ROUNDUP({W},0)"
+            G = f"ROUNDUP({V}/A_MPG_E,0)"
+        return area_expr(G, G, V), W
 
     srows = [("Ist", None)] + [("B", i) for i in range(8)] + [("C", i) for i in range(8)]
     for k, (var, i) in enumerate(srows):
@@ -1170,11 +1194,12 @@ def build(D, old):
             put(ws, f"A{r}", f"{var} – " + ("Ziel-LU" if var == "B" else "Ziel-LU oder Ist"), border=True)
             put(ws, f"B{r}", f"=Parameter!$A${23 + i}", fmt="0.0", border=True, align="center")
             x = f"$B{r}"
-        AR, V = scen_exprs(var, x)
-        put(ws, f"M{r}", f"=SUMPRODUCT((A_LIFT=1)*A_HPT*{AR})", fmt="#,##0", border=True)
-        put(ws, f"N{r}", f"=SUMPRODUCT((A_LIFT=2)*A_HPT*{AR})", fmt="#,##0", border=True)
-        put(ws, f"O{r}", f"=SUMPRODUCT((A_LIFT=3)*A_HPT*{AR})", fmt="#,##0", border=True)
-        put(ws, f"P{r}", f'=SUMPRODUCT((A_LIFT="Aussen")*A_HPT*{AR})', fmt="#,##0", border=True)
+        AR, V = scen_exprs(var, x, "AVG")
+        AR_MAX, _ = scen_exprs(var, x, "MAX")
+        put(ws, f"M{r}", f'=IF(Parameter!$E$30="MAX-Bestand",SUMPRODUCT((A_LIFT=1)*A_HPT*{AR_MAX}),SUMPRODUCT((A_LIFT=1)*A_HPT*{AR}))', fmt="#,##0", border=True)
+        put(ws, f"N{r}", f'=IF(Parameter!$E$30="MAX-Bestand",SUMPRODUCT((A_LIFT=2)*A_HPT*{AR_MAX}),SUMPRODUCT((A_LIFT=2)*A_HPT*{AR}))', fmt="#,##0", border=True)
+        put(ws, f"O{r}", f'=IF(Parameter!$E$30="MAX-Bestand",SUMPRODUCT((A_LIFT=3)*A_HPT*{AR_MAX}),SUMPRODUCT((A_LIFT=3)*A_HPT*{AR}))', fmt="#,##0", border=True)
+        put(ws, f"P{r}", f'=IF(Parameter!$E$30="MAX-Bestand",SUMPRODUCT((A_LIFT="Aussen")*A_HPT*{AR_MAX}),SUMPRODUCT((A_LIFT="Aussen")*A_HPT*{AR}))', fmt="#,##0", border=True)
         put(ws, f"C{r}", f"=M{r}/{CAP1}", fmt="0%", border=True)
         put(ws, f"D{r}", f"=N{r}/{CAP2}", fmt="0%", border=True)
         put(ws, f"E{r}", f"=O{r}/{CAP3}", fmt="0%", border=True)
@@ -1278,8 +1303,11 @@ def build(D, old):
          "(Parameter I27:K29); mindestens der Ist-Bestand bzw. eine Losgrösse passt in 1 Gebinde. Damit rechnen sie wie Gebinde-Artikel. Klasse im Blatt Artikel änderbar; «Gebindekategorie neu» oder «Tablare lose» haben Vorrang. Kein Stapeln.", ""),
         ("Varianten", "b"),
         ("A – Ist-Bestand: heutiger Bestand (unabhängig vom LU).", ""),
-        ("B – Ziel-LU: MAX = Jahresverbrauch / Ziel-LU, mindestens MB + Losgrösse, aufgerundet auf ganze Gebinde. Zielzustand nach Abbau des Überbestands.", ""),
-        ("C – Ziel-LU oder Ist (Hauptvariante): der höhere Wert aus B und Ist-Bestand. Platzbedarf, solange der Überbestand noch nicht abgebaut ist.", ""),
+        ("B – Ziel-LU: Ziel-Ø-Bestand = Jahresverbrauch / Ziel-LU (= Spalte «Max.Bestand bei vorg. Umschlag» im Kennzahlen-Export). Bestellmenge = 2 × (Ziel-Ø − MB), "
+         "mindestens Losgrösse (Mindestbestands-Strategie fix). MAX = MB + Bestellmenge → bestimmt den Platz (Gebinde). Ø-Bestand = MB + Bestellmenge/2 → bestimmt den Lagerwert.", ""),
+        ("Platzbedarf (Parameter E30): «Ø-Bestand» (Standard, wie Lagerplanung: Material rotiert) oder «MAX-Bestand» (fixe Fächer für MB + Bestellmenge).", ""),
+        ("C – Ziel-LU oder Ist (Hauptvariante): Platz = höherer Wert aus MAX (B) und Ist; Wert = höherer Wert aus Ø (B) und Ist – solange der Überbestand nicht abgebaut ist. "
+         "Heutiger Gesamt-LU ≈ 2.4: erst ein Ziel-LU darüber senkt Bestand und Platz.", ""),
         ("MAX final (gelb) ersetzt in B und C den berechneten Wert. Ziel-LU Artikel ersetzt den LU der Ansicht für diesen Artikel. Jahresverbrauch = Verbrauch Export × 12 / Anzahl Monate.", ""),
         ("Lift-Auslastung", "b"),
         ("Anzahl Gebinde = AUFRUNDEN(Menge / Menge pro Gebinde). Stapeln nur, wenn im Blatt «Gebinde-Kategorie» Lagen > 1 eingetragen sind.", ""),

@@ -39,22 +39,35 @@ Spalte G «Bestandsmenge» ist bei **711 von 1'464 Artikeln negativ**, und zwar 
 - **Neu: Ist-Bestand = Jahresanfang 2025 + G** (Parameter B20). Dazu **272 KTL/PAL-Artikel ergänzt**, die Bestand im Artikelstamm (23.06.2026) haben, aber im Kennzahlen-Auszug fehlen. Lift 1: Bestand aus Liftbericht.
 - **Lagerwert im Tool: 3.45 Mio. CHF** (Vorgabe aus dem ERP ≈ 3.6 Mio.; Rest v. a. Mietgeräte, Berufskleidung, Entsorgen – nicht im Lift).
 
-## Füllgrad über Lifthöhe + Lifte gemischt (05.10.2026)
-- Rechenweg wie Lagerplanung (Tabelle am Ende der Gebindeliste): Tablare = Gebinde / Gebinde je Tablar (S21 280, S22 140, S32 104, S33/S41 52, S51/S52 26, S61–S63 12, S71–S73 6, S81–S83 4). Jedes Tablar braucht **Gebindehöhe + 35 mm** (S21–S51 120 mm, S52/S62 210, S61 110, S63 310, S71/S81 200, S72/S82 400, S73/S83 600). **Füllgrad = Summe Höhe / 11'900 mm je Lift.**
-- **Alle 3 Lifte gemischt** (Parameter E27 = Ja): «Passt?» und Aussenlager über die Summe aller 3 Lifte (35'700 mm). Lift 1 heute aus Liftbericht (85 % = 10'115 mm).
-- Kontrolle Lagerplanung: 104 Tablare / 24'700 mm (Gebinde-Artikel) + Lift 1 heute 10'115 mm = 34'815 mm = 98 % → passt. Tool (Ist, inkl. lose Artikel geschätzt): 32'898 mm = **92 % → passt**.
+## Korrigiertes Bestandsmodell (05.10.2026)
+**Fehler vorher:** Lagerwert wurde mit dem MAX-Bestand gerechnet (alle Artikel gleichzeitig auf Höchststand), die Menge war auf ganze Gebinde aufgerundet, und MB + LG wurde als Untergrenze *zusätzlich* zu Verbrauch/LU genommen → Variante B ≈ doppelter Lagerwert.
 
-## Szenarien (Füllgrad Lifthöhe, Lifte gemischt)
+**Neu (Mindestbestands-Strategie unverändert):**
+- Ziel-Ø-Bestand = Verbrauch / Ziel-LU (= Kennzahlen-Spalte «Max.Bestand bei vorg. Umschlag»).
+- Bestellmenge = 2 × (Ziel-Ø − MB), **mindestens Losgrösse**. MAX = MB + Bestellmenge. **Ø-Bestand = MB + Bestellmenge / 2** → Lagerwert.
+- Platzbedarf (Parameter E30): **Ø-Bestand** (Standard; Material rotiert, wie Lagerplanung «Max.-Bestand Ergebnis») oder MAX-Bestand (fixe Fächer).
+- Gebinde-Rundung nur noch für den Platz, nicht für Menge/Wert.
+- Heutiger Gesamt-LU = **2.4** (Verbrauch 8.27 Mio./Jahr, Bestand 3.45 Mio.). Ziel-LU < 2.4 heisst mehr Bestand → LU-Liste jetzt 2 / 2.5 / 3 / 3.5 / 4 / 5 / 6 / 8.
+- Handrechnung: 107997 (V 199, MB 11, LG 200 → Bestellmenge 200, MAX 211, Ø 111), 100058 (V 849, MB 49, LG 90 → 468 / 517 / 283), 104232 (V 81, MB 12, LG 5 → 30 / 42 / 27) = Tool.
 
-| | Lift 1 | Lift 2 | Lift 3 | Total | Passt? | Aussenlager |
-|---|---|---|---|---|---|---|
-| Ist | 107 % | 123 % | 46 % | **92 %** | **JA** (2'800 mm frei ≈ 12 Tablare) | 0 |
-| B · LU 2 | 139 % | 160 % | 53 % | 117 % | NEIN | 6'229 mm ≈ 27 Tablare |
-| B · LU 3 | 127 % | 144 % | 52 % | 108 % | NEIN | 2'744 mm ≈ 12 Tablare |
-| C · LU 2 | 140 % | 184 % | 59 % | 128 % | NEIN | 9'883 mm ≈ 42 Tablare |
-| C · LU 3 | 128 % | 170 % | 58 % | 118 % | NEIN | 6'558 mm ≈ 28 Tablare |
+## Füllgrad über Lifthöhe, 3 Lifte gemischt
+Tablare = Gebinde / Gebinde je Tablar (Lagerplanung); Höhe je Tablar = Gebindehöhe + 35 mm; Kapazität 3 × 11'900 = 35'700 mm. Lift 1 heute aus Liftbericht (85 %).
 
-Die einzelnen Lift-% zeigen die Zuordnung nach «Lager in Zukunft»; gemischt wird Lift 3 mit Ware aus Lift 1/2 aufgefüllt. Variante B passt erst bei LU 6 knapp nicht (101 %).
+## Szenarien (Platz = Ø-Bestand)
+
+| | Lagerwert CHF | Δ zu Ist | Füllgrad 3 Lifte | Passt? |
+|---|---|---|---|---|
+| Ist (LU 2.4) | 3.45 Mio. | – | 92 % | JA |
+| B · LU 3 | 3.24 Mio. | −0.21 Mio. | 96 % | JA |
+| B · LU 4 | 2.67 Mio. | −0.78 Mio. | 91 % | JA |
+| B · LU 6 | 2.24 Mio. | −1.22 Mio. | 88 % | JA |
+| C · LU 3 | 4.99 Mio. | +1.54 Mio. | 110 % | NEIN (≈ 16 Tablare) |
+| C · LU 4 | 4.51 Mio. | +1.06 Mio. | 106 % | NEIN (≈ 9 Tablare) |
+
+- **B = Zielzustand** (Überbestand abgebaut, Unterbestand aufgefüllt): ab LU 3 weniger Wert als heute und alles passt in die Lifte.
+- **C = Übergang** (pro Artikel der höhere Wert aus Ziel und Ist): Unterbestände werden schon aufgefüllt, Überbestände sind noch da → vorübergehend mehr Wert und Platz.
+- Abgleich mit der Liste (1'184 Gebinde-Artikel): Gebinde Liste Bestand 1'659 / Tool Ist 1'752; Liste «Alles max» 1'806 / Tool C · LU 4 1'872. Auch die Liste hat beim «Max» mehr Wert (5.12 Mio.) als beim Bestand (3.57 Mio.) – gleiche Logik wie Variante C.
+- Überbestand (Ist > MAX): 818 Artikel, 1.32 Mio. CHF → das ist das Abbaupotenzial.
 
 ## Annahmen
 1. Lose Artikel: Tablar-Anteil je Artikel KTL 0.03, PAL 0.15, LIFT1 1.0, andere 0.15. In Lift 2 sind rund 35 % (Ist) bis 40 % (C · LU 2) der Tablare geschätzt (Cockpit Zeilen 33–37).
@@ -75,7 +88,7 @@ Die einzelnen Lift-% zeigen die Zuordnung nach «Lager in Zukunft»; gemischt wi
 - Höhe: «max. Ladehöhe je Tablar» ist leer. Sobald sie eingetragen ist, erscheint bei zu hohen Gebinden der Hinweis «zu hoch für Tablar».
 
 ## Prüfung
-- LibreOffice-Neuberechnung: 104'570 Formeln, 0 Fehler. Regler-Tests bestanden. Regler-Tests erneut bestanden.
+- LibreOffice-Neuberechnung: 0 Fehler. Regler-Tests bestanden (LU 2→3 senkt Platz und Wert, A unabhängig vom LU, C ≥ B). Regler-Tests erneut bestanden.
 - LU 2 → 3 senkt die Auslastung in B und C. Variante A bleibt unabhängig vom LU. C ≥ B und C ≥ Ist gilt bei jedem Artikel.
 - Ansicht 2/3 im Cockpit = Szenario-Zeile C·LU2 / C·LU3.
 - 5 Handrechnungen stimmen: 101749 (Lift 1, lose), 100058 (Lift 2, S71, ohne Ist), 107997 (Lift 3, S51), 002049 (lose PAL), 005101 (kein Verbrauch).
