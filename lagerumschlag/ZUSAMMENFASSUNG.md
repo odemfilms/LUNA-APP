@@ -58,10 +58,14 @@ Mit Ist = Jahresanfang 2025 + G: Ist 107 % / 111 % / 51 % (Lift 1 knapp zu voll)
 4. MAX final und Ziel-LU je Artikel gelten in den Varianten B und C. MAX final ersetzt dort den berechneten Wert.
 5. Reihenfolge für Aussenlager: je Liftgruppe nach Verbrauch pro m² absteigend.
 
+## Entscheide (05.10.2026)
+- MAX mindestens MB + ganze Losgrösse: bleibt so (Vorgabe Vorgesetzter).
+- PAL-Artikel ohne Eintrag «Lager in Zukunft» gehören in den Lift (Lift 2/3 nach Gebinde) – so umgesetzt.
+- Gebinde werden nicht gestapelt.
+
 ## Offene Punkte
 - Ist-Bestand (siehe oben). Für Lift 1 gilt jetzt der Liftbericht.
 - Die 85 % für Lift 1 sind als **Fläche** (bzw. belegte Tablare) interpretiert. Bitte bestätigen. Liftberichte für Lift 2 und 3 würden die Schätzung dort ebenfalls ersetzen.
-- MAX = Verbrauch / LU, **mindestens MB + LG**. Bei 1'249 Artikeln bestimmt MB + LG den Wert. Dadurch ist Variante B bei LU 2 rund 6.2 Mio. CHF wert. Ist «mindestens MB + LG» so gewollt, oder eher MB + LG/2?
 - Bei losen Artikeln mit kleinem Ist-Bestand wird der Platz in B/C stark hochskaliert (Faktor MAX / Ist). Besser: Gebinde zuweisen (Spalte «Gebindekategorie neu») oder eigene Tablare eintragen.
 - Höhe: «max. Ladehöhe je Tablar» ist leer. Sobald sie eingetragen ist, erscheint bei zu hohen Gebinden der Hinweis «zu hoch für Tablar».
 
