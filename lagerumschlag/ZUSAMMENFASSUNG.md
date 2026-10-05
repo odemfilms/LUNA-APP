@@ -14,28 +14,35 @@ Spalte G «Bestandsmenge» ist bei **711 von 1'464 Artikeln negativ**, und zwar 
 - H4 = 747'814.70 CHF ist SUM(H7:H1440), negative Werte mitgerechnet. Mit «negativ = 0», wie verlangt, ergibt sich 1'331'183 CHF (Export-Werte) bzw. 1'371'980 CHF (Menge × Preis). Die Kontrolle «≈ 747'815» lässt sich also nur mit den negativen Werten erreichen. Kontrollblock: Parameter!I10.
 - Umschaltbar in **Parameter B20**: «Export (Bestandsmenge)» (Standard, wie im Auftrag) oder «Jahresanfang 2025 + Export». Bitte an 2–3 Artikeln im ERP prüfen.
 
+## Liftbericht Lift 1 (Modula «Artikelbestand für Maschine 1», Stand 05.10.2026)
+- Datei `input/Liftbestand_Lift1_RPT_ART_GIAC_MACCHINA_MOD.prnx`, wird von `build_tool.py` eingelesen. Weitere Berichte (Maschine 2/3) einfach in `input/` legen.
+- In Lift 1 liegen **48 Artikel** mit 531 Stk Fach-Kapazität und 293 Stk Bestand. Davon stehen 27 im Export unter LIFT1, 15 unter PAL, und 6 fehlen im Kennzahlen-Auszug (005301, 103683, 106582, 107412, 107414, 108768). Diese 6 sind ergänzt. Artikel 107415 steht im Export unter LIFT1, aber nicht im Bericht.
+- Neue Logik: Artikel im Liftbericht bekommen dessen **Lift und Bestand**. Ihr Platz ist das **reservierte Fach**. Die gemessene Belegung (Parameter L5, **Lift 1 = 85 %**) wird im Verhältnis der Fach-Kapazität auf die Artikel verteilt. In B/C wächst die Fläche erst, wenn MAX > Fach-Kapazität. Ein-/ausschaltbar in Parameter B21. Für Lift 2/3 kann in L6/L7 ebenfalls ein gemessener Wert eingetragen werden.
+- Ergebnis: Lift 1 «Ist» = **86 %** (85 % aus dem Bericht + 1 % für 107415).
+- Bestandsvergleich (42 Artikel): Der Liftbericht stimmt bei 17 Artikeln mit «Jahresanfang 2025 + G» überein, mit der Export-Bestandsmenge G nur bei 5. Das bestätigt, dass G nicht der Lagerbestand ist.
+
 ## Szenarien (Auslastung Lift 1 / Lift 2 / Lift 3 / Lift 2+3 / Total)
-Ist-Bestand = Export G (Standard):
+Mit Liftbericht, übrige Artikel Ist-Bestand = Export G (Standard):
 
 | | Lift 1 | Lift 2 | Lift 3 | 2+3 | Total | Passt? | Aussenlager |
 |---|---|---|---|---|---|---|---|
-| Ist | 25 % | 63 % | 15 % | 39 % | 34 % | JA | 0 m² |
-| B · LU 2 | 85 % | 195 % | 36 % | 116 % | 106 % | NEIN | 55 m² |
-| C · LU 2 | 85 % | 202 % | 37 % | 120 % | 108 % | NEIN | 68 m² |
-| B · LU 3 | 79 % | 179 % | 35 % | 107 % | 98 % | NEIN | 25 m² |
-| C · LU 3 | 79 % | 186 % | 37 % | 111 % | 101 % | NEIN | 39 m² |
+| Ist | 86 % | 62 % | 15 % | 38 % | 54 % | JA | 0 m² |
+| B · LU 2 | 100 % | 191 % | 36 % | 113 % | 109 % | NEIN | 47 m² |
+| C · LU 2 | 100 % | 197 % | 37 % | 117 % | 111 % | NEIN | 60 m² |
+| B · LU 3 | 94 % | 174 % | 35 % | 105 % | 101 % | NEIN | 17 m² |
+| C · LU 3 | 94 % | 181 % | 37 % | 109 % | 104 % | NEIN | 31 m² |
 
-Ist-Bestand = Jahresanfang 2025 + G:
+Mit Liftbericht, übrige Artikel Ist-Bestand = Jahresanfang 2025 + G:
 
 | | Lift 1 | Lift 2 | Lift 3 | 2+3 | Total | Passt? |
 |---|---|---|---|---|---|---|
-| Ist | 41 % | 133 % | 34 % | 83 % | 69 % | JA (mit Ausgleich 2↔3) |
-| B · LU 2 | 67 % | 210 % | 36 % | 123 % | 104 % | NEIN |
-| C · LU 2 | 67 % | 229 % | 41 % | 135 % | 112 % | NEIN |
-| B · LU 3 | 63 % | 191 % | 35 % | 113 % | 96 % | NEIN |
-| C · LU 3 | 63 % | 210 % | 41 % | 125 % | 105 % | NEIN |
+| Ist | 86 % | 128 % | 34 % | 81 % | 83 % | JA (mit Ausgleich 2↔3) |
+| B · LU 2 | 100 % | 203 % | 36 % | 120 % | 113 % | NEIN |
+| C · LU 2 | 100 % | 222 % | 41 % | 131 % | 121 % | NEIN |
+| B · LU 3 | 94 % | 184 % | 35 % | 110 % | 104 % | NEIN |
+| C · LU 3 | 94 % | 203 % | 41 % | 122 % | 113 % | NEIN |
 
-Engpass ist immer **Lift 2 + 3**, also Lift 2: dorthin gehen lose PAL-Artikel, Trennbleche und grosse Euroboxen. Lift 3 ist nur zu ~35–40 % belegt. Mit den aktuellen Annahmen passt bei **keinem LU bis 6** alles hinein, weil die Untergrenze MB + LG den MAX hochhält. Lift 1 allein passt ab LU 1.5.
+Lift 1 ist bei LU 2 praktisch voll (100 %) und hat bei LU 3 noch 6 % Reserve. Engpass bleibt **Lift 2**: Dort landen die losen PAL-Artikel, Trennbleche und grossen Euroboxen. Lift 3 ist nur zu ~35–40 % belegt. Variante B passt im Standard **ab LU 5**, Variante C bei keinem LU bis 6.
 
 ## Annahmen
 1. Lose Artikel: KTL 0.1 m², PAL 0.5 m², LIFT1 3.479 m² (1 Tablar), andere 0.5 m² je Artikel. Rund die Hälfte der belegten Fläche beruht auf diesen Schätzungen (Cockpit Zeilen 33–37).
@@ -45,13 +52,14 @@ Engpass ist immer **Lift 2 + 3**, also Lift 2: dorthin gehen lose PAL-Artikel, T
 5. Reihenfolge für Aussenlager: je Liftgruppe nach Verbrauch pro m² absteigend.
 
 ## Offene Punkte
-- Ist-Bestand (siehe oben).
+- Ist-Bestand (siehe oben). Für Lift 1 gilt jetzt der Liftbericht.
+- Die 85 % für Lift 1 sind als **Fläche** (bzw. belegte Tablare) interpretiert. Bitte bestätigen. Liftberichte für Lift 2 und 3 würden die Schätzung dort ebenfalls ersetzen.
 - MAX = Verbrauch / LU, **mindestens MB + LG**. Bei 1'249 Artikeln bestimmt MB + LG den Wert. Dadurch ist Variante B bei LU 2 rund 6.2 Mio. CHF wert. Ist «mindestens MB + LG» so gewollt, oder eher MB + LG/2?
 - Bei losen Artikeln mit kleinem Ist-Bestand wird die Fläche in B/C stark hochskaliert, z. B. 110820 Sicherungsscheibe: Ist 1, MAX 100 → 50 m². Gegebenenfalls eigene Flächen eintragen oder einen Gebinde-Typ zuweisen.
 - Höhe: «max. Ladehöhe je Tablar» ist leer. Sobald sie eingetragen ist, erscheint bei zu hohen Gebinden der Hinweis «zu hoch für Tablar».
 
 ## Prüfung
-- LibreOffice-Neuberechnung: 78'181 Formeln, 0 Fehler.
+- LibreOffice-Neuberechnung: 80'110 Formeln, 0 Fehler (nach Einbau des Liftberichts).
 - LU 2 → 3 senkt die Auslastung in B und C. Variante A bleibt unabhängig vom LU. C ≥ B und C ≥ Ist gilt bei jedem Artikel.
 - Ansicht 2/3 im Cockpit = Szenario-Zeile C·LU2 / C·LU3.
 - 5 Handrechnungen stimmen: 101749 (Lift 1, lose), 100058 (Lift 2, S71, ohne Ist), 107997 (Lift 3, S51), 002049 (lose PAL), 005101 (kein Verbrauch).

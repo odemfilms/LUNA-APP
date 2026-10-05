@@ -15,7 +15,8 @@ Ablauf:
     Die alte Datei wird vorher als Sicherung kopiert.
  3. Tool neu schreiben (nur Formeln, keine Makros) und mit LibreOffice berechnen.
 """
-import os, re, sys, shutil, datetime, subprocess, json
+import os, re, sys, shutil, datetime, subprocess, json, glob, gzip
+import xml.etree.ElementTree as ET
 import pandas as pd
 import numpy as np
 from openpyxl import Workbook, load_workbook
@@ -35,6 +36,9 @@ KENNZAHLEN_FILE = os.path.join(HERE, "input", "Kennzahlen_Lager_Auszug.xlsx")
 ARTIKELSTAMM_FILE = os.path.join(HERE, "input", "Artikelstamm_mit_Verbrauch_und_Gebinde_Umschlag_2_20260520.xlsx")
 TOOL_FILE = os.path.join(HERE, "Lagerumschlag_Tool.xlsx")      # bestehendes Tool -> Eingaben übernehmen
 OUTPUT_FILE = os.path.join(HERE, "Lagerumschlag_Tool.xlsx")
+# Liftberichte (Modula «Artikelbestand für Maschine», .prnx) – alle Dateien im Ordner input
+LIFT_REPORTS = sorted(glob.glob(os.path.join(HERE, "input", "*.prnx")))
+MASCHINE_ZU_LIFT = {"1": 1, "2": 2, "3": 3}                  # Maschinen-Nr. im Bericht -> Lift
 N_NEW = 100                                                  # reservierte Zeilen für neue Artikel
 RECALC_SCRIPT = os.environ.get("RECALC_SCRIPT", "")          # optional für --pruefen
 
@@ -105,6 +109,47 @@ def txt(x):
 GEB_RE = re.compile(r"[SP]\d\d")
 
 
+def parse_liftbericht(path):
+    """Modula-Bericht RPT_ART_GIAC_MACCHINA_MOD (.prnx = gzip-XML) -> (Maschine, [Zeilen])."""
+    raw = open(path, "rb").read()
+    x = gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw
+    root = ET.fromstring(x.decode("utf-8-sig").encode("utf-8"))
+    labels = [e for e in root.iter() if e.get("BrickType") == "Label"]
+    texts = [e.get("Text") for e in labels]
+    maschine = ""
+    for i, t in enumerate(texts):
+        if t == "Maschine" and i + 1 < len(texts) and re.fullmatch(r"\d+", texts[i + 1] or ""):
+            maschine = texts[i + 1]
+            break
+    names = {"Code": "code", "Beschreibung": "bez", "Gesamtkapazität": "kap", "Gesamtbestand": "bestand"}
+    hdr = []  # (x, zeile, key)
+    head_y = None
+    for e in labels:
+        if e.get("Text") in names:
+            x, y = [float(v) for v in e.get("Rect").split(",")[:2]]
+            head_y = y if head_y is None else min(head_y, y)
+            hdr.append((x, y, names[e.get("Text")]))
+    hdr = [(x, 0 if y - head_y < 40 else 1, k) for x, y, k in hdr]
+    rows = []
+    for pnl in root.iter():
+        if pnl.get("BrickType") != "Panel" or not pnl.get("Rect"):
+            continue
+        px = float(pnl.get("Rect").split(",")[0])
+        d = {}
+        for e in pnl.iter():
+            if e.get("BrickType") != "Label" or e is pnl:
+                continue
+            x, y = [float(v) for v in e.get("Rect").split(",")[:2]]
+            line = 0 if y < 40 else 1
+            for hx, hl, k in hdr:
+                if hl == line and abs(px + x - hx) < 60:
+                    d[k] = e.get("Text")
+        if d.get("code") and d.get("kap") is not None:
+            rows.append(dict(code=norm_nr(d["code"]), bez=txt(d.get("bez")), kap=num(d.get("kap")),
+                             bestand=num(d.get("bestand"))))
+    return maschine, rows
+
+
 def load_data():
     # --- Kennzahlen: Basis Bestand -----------------------------------------
     raw = pd.read_excel(KENNZAHLEN_FILE, "Auswertung Basis Bestand", header=None)
@@ -151,6 +196,8 @@ def load_data():
             d["geb"], d["mpg"] = g, num(r[col_mpg2], 0)
         d["bem"] = bem
         d["hl"] = txt(r.get("Hauptlager"))
+        d.update(bez=txt(r.get("Bezeichnung")), preis=num(r.get("Preis-GLD-Akt")), lg=num(r.get("Losgröße")),
+                 status=txt(r.get("Artikelstat.")), wbz=num(r.get("Wbz."), None))
         stamm[n] = d
     gk = pd.read_excel(ARTIKELSTAMM_FILE, "Gebinde-Kategorie")
     gebkat = []
@@ -177,7 +224,33 @@ def load_data():
             mb=num(mb), lg=num(r[3]), wbz=num(r[10], None), geb=st.get("geb") or "LOSE", mpg=st.get("mpg") or None,
             bem=st.get("bem", ""), ursache=txt(r[41]), aktion=txt(r[42]), xrow=hdr + 2 + i,
         ))
-    return dict(arts=arts, h4=h4, period=period, gebkat=gebkat, verb=verb, stamm=stamm)
+    # --- Liftberichte -------------------------------------------------------
+    lift_rows = []
+    for f in LIFT_REPORTS:
+        m, rows = parse_liftbericht(f)
+        lift = MASCHINE_ZU_LIFT.get(m)
+        if not lift:
+            print(f"Warnung: {os.path.basename(f)} – Maschine '{m}' keinem Lift zugeordnet, übersprungen")
+            continue
+        for x in rows:
+            x["lift"] = lift
+            lift_rows.append(x)
+    byn = {a["nr"]: a for a in arts}
+    for x in lift_rows:
+        a = byn.get(x["code"])
+        if a is None:  # im Lift, aber nicht im Bestandsauszug -> ergänzen
+            st = stamm.get(x["code"], {})
+            m = mbmap.get(x["code"], {})
+            a = dict(nr=x["code"], bez=st.get("bez") or x["bez"], status=st.get("status", ""), hl=st.get("hl") or "(leer)",
+                     abc="", preis=st.get("preis", 0.0), bm=x["bestand"], ja=0.0, bwx=0.0,
+                     verbx=verb.get(x["code"], 0.0), avg=None, lu_ist=None, mb=max(m.values()) if m else 0.0,
+                     lg=st.get("lg", 0.0), wbz=st.get("wbz"), geb=st.get("geb") or "LOSE", mpg=st.get("mpg") or None,
+                     bem="; ".join(v for v in ["nur im Liftbericht (nicht im Kennzahlen-Auszug)", st.get("bem", "")] if v),
+                     ursache="", aktion="", xrow=None)
+            arts.append(a)
+            byn[a["nr"]] = a
+        a.update(lift_rep=x["lift"], kap_rep=x["kap"], best_rep=x["bestand"])
+    return dict(arts=arts, h4=h4, period=period, gebkat=gebkat, verb=verb, stamm=stamm, lift_rows=lift_rows)
 
 
 # ============================================================================
@@ -306,6 +379,7 @@ def build(D, old):
     wsP = wb.create_sheet("Parameter")
     wsN = wb.create_sheet("Neue Artikel")
     wsG = wb.create_sheet("Gebinde-Kategorie")
+    wsL = wb.create_sheet("Liftbericht")
     wsI = wb.create_sheet("Anleitung")
     oldP = (old or {}).get("Parameter", {})
     oldC = (old or {}).get("Cockpit", {})
@@ -321,7 +395,8 @@ def build(D, old):
     put(ws, "A2", "Gelbe Felder dürfen geändert werden. Alles andere rechnet automatisch.", italic=True)
     put(ws, "A3", "Lagerlifte", bold=True, size=11)
     heads = ["Lift", "Name", "Typ", "Hauptlager", "Anzahl Tablare", "Tablar Breite mm", "Tablar Tiefe mm",
-             "Lifthöhe mm", "max. Ladehöhe je Tablar mm (optional)", "Tablarfläche m²", "Kapazität m²"]
+             "Lifthöhe mm", "max. Ladehöhe je Tablar mm (optional)", "Tablarfläche m²", "Kapazität m²",
+             "Belegung heute gemessen % (leer = schätzen)"]
     for j, h in enumerate(heads):
         put(ws, f"{L(j + 1)}4", h, bold=True, fill=SUB, wrap=True, border=True)
     lifts = [("Lift 1 – Schwer", "ausfahrbar, schwere Teile", "LIFT1"),
@@ -340,6 +415,7 @@ def build(D, old):
         pin(ws, f"I{r}", None, oldP, fmt="#,##0")
         put(ws, f"J{r}", f"=F{r}*G{r}/1000000", fmt="0.000", border=True)
         put(ws, f"K{r}", f"=E{r}*J{r}", fmt="#,##0.0", border=True)
+        pin(ws, f"L{r}", 0.85 if i == 0 else None, oldP, fmt="0%")
     put(ws, "A8", "Total", bold=True, border=True)
     put(ws, "E8", "=SUM(E5:E7)", bold=True, fmt="0", border=True)
     put(ws, "K8", "=SUM(K5:K7)", bold=True, fmt="#,##0.0", border=True)
@@ -377,6 +453,13 @@ def build(D, old):
     put(ws, "C20", "Export (Bestandsmenge) = Spalte G wie geliefert, negativ = 0.  "
                    "«Jahresanfang 2025 + Export» = Spalte T + Spalte G (falls G die Bewegung seit 01.01.2025 ist).",
         italic=True)
+    put(ws, "A21", "Liftbericht verwenden", bold=True, size=11)
+    pin(ws, "B21", "Ja", oldP)
+    dv = DataValidation(type="list", formula1='"Ja,Nein"', allow_blank=False)
+    ws.add_data_validation(dv)
+    dv.add("B21")
+    put(ws, "C21", "Ja = für Artikel im Liftbericht gelten dessen Bestand und Lift. Die Fachflächen werden so verteilt, "
+                   "dass «Ist» der gemessenen Belegung (Spalte L) entspricht.", italic=True)
     put(ws, "A22", "Ziel-LU Auswahl", bold=True, size=11)
     put(ws, "D22", "Varianten (nicht ändern)", bold=True, size=11)
     for i, v in enumerate(LU_LIST):
@@ -440,9 +523,11 @@ def build(D, old):
     put(ws, "I14", "Ist-Wert im Tool (Ist-Bestand × Preis)")
     put(ws, "I15", "Artikel mit negativer Bestandsmenge im Export")
     put(ws, "I16", "Artikel im Tool (ohne neue)")
+    put(ws, "I17", "Artikel im Liftbericht / davon nicht im Kennzahlen-Auszug")
+    put(ws, "I18", "Ist-Belegung Lift 1 lt. Tool (Kontrolle gegen L5)")
     # Formeln dafür weiter unten (Spaltenbuchstaben nötig)
     ws.column_dimensions["A"].width = 16
-    for c, w in zip("BCDEFGHIJK", (22, 28, 24, 10, 11, 11, 11, 14, 11, 11)):
+    for c, w in zip("BCDEFGHIJKL", (22, 28, 24, 10, 11, 11, 11, 14, 11, 11, 14)):
         ws.column_dimensions[c].width = w
     ws.freeze_panes = "A5"
 
@@ -506,6 +591,8 @@ def build(D, old):
     col("garea", "Grundfläche Gebinde m²", 9, "f", fmt="0.0000")
     col("lose_in", "Fläche lose m² (ganzer Bestand)", 10, "i", fmt="0.000")
     col("geb_neu", "Gebindekategorie neu", 9, "i"); col("mpg_neu", "Menge pro Gebinde neu", 9, "i")
+    col("liftr", "Lift lt. Liftbericht", 7); col("kapr", "Fach-Kapazität Stk (Liftbericht)", 8, fmt="#,##0")
+    col("bestr", "Bestand lt. Liftbericht", 8, fmt="#,##0")
     col("lift_vor", "Lift Vorschlag", 7, "f"); col("lift_in", "Lift manuell", 7, "i")
     col("lu_art", "Ziel-LU Artikel", 7, "i", fmt="0.0")
     col("maxb", "MAX Variante B (Ansicht 2)", 10, "f", fmt="#,##0"); col("maxc", "MAX Variante C (Ansicht 2)", 10, "f", fmt="#,##0")
@@ -528,7 +615,8 @@ def build(D, old):
                     ("lose", "Lose (1/0)", "0"), ("la", "Fläche lose wirksam m²", "0.000"), ("lift", "Lift wirksam", None),
                     ("grp", "Liftgruppe", None), ("luo", "Ziel-LU Artikel (0=keiner)", "0.0"), ("finf", "MAX final gesetzt", "0"),
                     ("finv", "MAX final Wert", "#,##0"), ("mblg", "MB + LG", "#,##0"), ("istn", "Gebinde bei Ist", "#,##0"),
-                    ("finn", "Gebinde bei MAX final", "#,##0"), ("hgt", "Gebindehöhe cm", "0"), ("maxh", "max. Ladehöhe Lift mm", "0")]:
+                    ("finn", "Gebinde bei MAX final", "#,##0"), ("hgt", "Gebindehöhe cm", "0"), ("maxh", "max. Ladehöhe Lift mm", "0"),
+                    ("fach", "Fachfläche lt. Liftbericht m²", "0.000")]:
         col(k, h, 9, "f", 3, f)
     C = {c["key"]: L(i + 1) for i, c in enumerate(COLS)}
     KIND = {c["key"]: c["kind"] for c in COLS}
@@ -550,20 +638,21 @@ def build(D, old):
     GLT = f"Parameter!$F${GL_FIRST}:$G${GL_LAST}"
 
     FORM = {
-        "ist": '=MAX(0,IF(Parameter!$B$20="Jahresanfang 2025 + Export",@ja@+@bm@,@bm@))',
+        "ist": ('=MAX(0,IF(AND(Parameter!$B$21="Ja",ISNUMBER(@bestr@)),@bestr@,'
+                'IF(Parameter!$B$20="Jahresanfang 2025 + Export",@ja@+@bm@,@bm@)))'),
         "istwert": "=@ist@*@preis@",
         "verb": "=@verbx@*Parameter!$B$18",
         "garea": f'=IF(@lose@=1,0,IFERROR(VLOOKUP(@geb_e@,{GEB_RNG},6,0)+0,0))',
-        "lift_vor": (f'=IF(@nr@="","",IF(IFERROR(VLOOKUP(@hl@,{HLT},2,0),"Nein")="2+3",'
+        "lift_vor": (f'=IF(@nr@="","",IF(AND(Parameter!$B$21="Ja",ISNUMBER(@liftr@)),@liftr@,IF(IFERROR(VLOOKUP(@hl@,{HLT},2,0),"Nein")="2+3",'
                      f'IF(ISNUMBER(SEARCH("grosser Artikel",@bem@)),2,IFERROR(VLOOKUP(@geb_e@,{GLT},2,0),2)),'
                      f'IF(OR(IFERROR(VLOOKUP(@hl@,{HLT},2,0),"Nein")="Nein",IFERROR(VLOOKUP(@hl@,{HLT},2,0),"Nein")=""),"-",'
-                     f'VLOOKUP(@hl@,{HLT},2,0))))'),
+                     f'VLOOKUP(@hl@,{HLT},2,0)))))'),
         "maxb": "=@b2@",
         "maxc": "=MAX(@b2@,@ist@)",
         "hint": ('=IF(@nr@="","",IF(@neu@=1,"Neu; ","")'
                  '&IF(AND(@neu@=0,@bm@<0),"negativer Bestand (Export "&@bm@&"); ","")'
                  '&IF(@verb@<=0,"Kein Verbrauch; ","")'
-                 '&IF(@lose@=1,"Lose – Fläche geschätzt; ","")'
+                 '&IF(@fach@>0,"Lift "&@liftr@&" lt. Liftbericht (Fach "&@kapr@&" Stk); ",IF(@lose@=1,"Lose – Fläche geschätzt; ",""))'
                  '&IF(@ist@>@b2@,"Überbestand "&ROUND(@ist@-@b2@,0)&" Stk / CHF "&ROUND((@ist@-@b2@)*@preis@,0)&"; ","")'
                  '&IF(AND(@finf@=1,@finv@<@mblg@),"MAX < MB+LG; ","")'
                  '&IF(AND(@maxh@>0,@hgt@*10>@maxh@),"zu hoch für Tablar; ","")'
@@ -584,6 +673,8 @@ def build(D, old):
         "istn": "=ROUNDUP(@ist@/@mpg_e@,0)",
         "finn": "=ROUNDUP(@finv@/@mpg_e@,0)",
         "hgt": f'=IF(@lose@=1,0,IFERROR(VLOOKUP(@geb_e@,{GEB_RNG},5,0)+0,0))',
+        "fach": ('=IF(AND(Parameter!$B$21="Ja",ISNUMBER(@liftr@),N(@kapr@)>0),IFERROR(N(INDEX(Parameter!$L$5:$L$7,@liftr@))'
+                 '*INDEX(Parameter!$K$5:$K$7,@liftr@)*@kapr@/SUMIFS(#kapr#,#liftr#,@liftr@),0),0)'),
         "maxh": "=IFERROR(IF(OR(@lift@=1,@lift@=2,@lift@=3),N(INDEX(Parameter!$I$5:$I$7,@lift@)),0),0)",
     }
     for v in (1, 2, 3):
@@ -593,7 +684,8 @@ def build(D, old):
             f"b{v}": f"=ROUNDUP(MAX(@verb@/IF(@luo@>0,@luo@,MAX(0.1,N({lu}))),@mblg@)/@mpg_e@,0)*@mpg_e@",
             f"q{v}": (f'=IF(LEFT({var},1)="A",@ist@,IF(@finf@=1,@finv@,IF(LEFT({var},1)="B",@b{v}@,MAX(@b{v}@,@ist@))))'),
             f"n{v}": f"=IF(@lose@=1,0,ROUNDUP(@q{v}@/@mpg_e@,0))",
-            f"a{v}": f"=IF(@lose@=1,IF(@q{v}@<=0,0,@la@*MAX(1,IF(@ist@>0,@q{v}@/@ist@,1))),@n{v}@*@garea@)",
+            f"a{v}": (f"=IF(@fach@>0,@fach@*MAX(1,@q{v}@/@kapr@),"
+                      f"IF(@lose@=1,IF(@q{v}@<=0,0,@la@*MAX(1,IF(@ist@>0,@q{v}@/@ist@,1))),@n{v}@*@garea@))"),
             f"w{v}": f"=@q{v}@*@preis@",
             f"pr{v}": f"=IF(@a{v}@>0,@verb@/@a{v}@,-1)",
             f"cum{v}": (f'=IF(AND(OR(@grp@="L1",@grp@="L23"),@a{v}@>0),SUMIFS(#a{v}#,#grp#,@grp@,#pr{v}#,">"&@pr{v}@)'
@@ -637,7 +729,8 @@ def build(D, old):
             vals = dict(nr=a["nr"], bez=a["bez"], status=a["status"], hl=a["hl"], abc=a["abc"], preis=a["preis"],
                         avg=a["avg"], lu_ist=a["lu_ist"], mb=a["mb"], lg=a["lg"], wbz=a["wbz"], geb=a["geb"],
                         mpg=a["mpg"], ursache=a["ursache"] or None, aktion=a["aktion"] or None,
-                        bm=a["bm"], ja=a["ja"], bwx=a["bwx"], verbx=a["verbx"], bem=a["bem"], neu=0)
+                        bm=a["bm"], ja=a["ja"], bwx=a["bwx"], verbx=a["verbx"], bem=a["bem"], neu=0,
+                        liftr=a.get("lift_rep"), kapr=a.get("kap_rep"), bestr=a.get("best_rep"))
             prev = oldA.get(a["nr"], {})
         else:
             nr_ = f"{NA}$A${5 + a}"
@@ -668,7 +761,7 @@ def build(D, old):
     for v in (1, 2, 3):
         ws.column_dimensions.group(C[f"q{v}"], C[f"w{v}"], outline_level=1, hidden=False)
         ws.column_dimensions.group(C[f"b{v}"], C[f"ant{v}"], outline_level=2, hidden=True)
-    ws.column_dimensions.group(C["bm"], C["maxh"], outline_level=1, hidden=True)
+    ws.column_dimensions.group(C["bm"], C["fach"], outline_level=1, hidden=True)
     ws.sheet_properties.outlinePr.summaryRight = False
     ws.freeze_panes = "C7"
     ws.auto_filter.ref = f"A6:{C['komm']}{RN}"
@@ -686,7 +779,7 @@ def build(D, old):
     ws.conditional_formatting.add(hr, FormulaRule(formula=[f'ISNUMBER(SEARCH("Überbestand",{C["hint"]}{R0}))'], fill=ORANGE_F))
 
     # Defined Names (für Szenarien)
-    for k in ("ist", "verb", "mblg", "mpg_e", "garea", "lose", "la", "luo", "finf", "finv", "lift", "preis", "istn", "finn"):
+    for k in ("ist", "verb", "mblg", "mpg_e", "garea", "lose", "la", "luo", "finf", "finv", "lift", "preis", "istn", "finn", "fach", "kapr"):
         nm = "A_" + k.upper()
         wb.defined_names[nm] = DefinedName(nm, attr_text=f"Artikel!${C[k]}${R0}:${C[k]}${RN}")
 
@@ -696,6 +789,8 @@ def build(D, old):
     put(wsP, "M14", f"=SUM({RG('istwert')})", fmt="#,##0.00")
     put(wsP, "M15", f'=COUNTIFS({RG("bm")},"<0",{RG("neu")},0)', fmt="0")
     put(wsP, "M16", f'=COUNTIFS({RG("neu")},0)', fmt="0")
+    put(wsP, "M17", f'=COUNT({RG("liftr")})&" / "&COUNTIFS({RG("liftr")},">0",{RG("bem")},"nur im Liftbericht*")')
+    put(wsP, "M18", "=Szenarien!C5", fmt="0%")
     wsP.column_dimensions["M"].width = 14
 
     # ------------------------------------------------------------------ Cockpit
@@ -790,18 +885,20 @@ def build(D, old):
         put(ws, f"{c[2]}31", f'=SUMPRODUCT(({A("ist")}>{A(f"b{v}")})*({A("ist")}-{A(f"b{v}")})*{A("preis")})', fmt="#,##0")
         put(ws, f"{c[3]}30", "(LU dieser Ansicht)", italic=True, color="808080")
         # Gebinde vs lose
-        for j, h in enumerate(["Fläche je Lift", "Gebinde m²", "lose m² (geschätzt)", "Anteil lose"]):
+        for j, h in enumerate(["Fläche je Lift", "Gebinde m²", "Fächer lt. Liftbericht m²", "lose m² (geschätzt)", "Anteil geschätzt"]):
             put(ws, f"{c[j]}33", h, bold=True, fill=SUB, border=True, wrap=True, align="center")
         for i, (lbl, n) in enumerate(lifts_lbl):
             r = 34 + i
             put(ws, f"{c[0]}{r}", lbl, border=True)
-            put(ws, f"{c[1]}{r}", f"=SUMIFS({A(f'a{v}')},{A('lift')},{n},{A('lose')},0)", fmt="#,##0.0", border=True)
-            put(ws, f"{c[2]}{r}", f"=SUMIFS({A(f'a{v}')},{A('lift')},{n},{A('lose')},1)", fmt="#,##0.0", border=True)
-            put(ws, f"{c[3]}{r}", f"=IF({c[1]}{r}+{c[2]}{r}>0,{c[2]}{r}/({c[1]}{r}+{c[2]}{r}),0)", fmt="0%", border=True)
+            put(ws, f"{c[1]}{r}", f"=SUMIFS({A(f'a{v}')},{A('lift')},{n},{A('lose')},0,{A('fach')},0)", fmt="#,##0.0", border=True)
+            put(ws, f"{c[2]}{r}", f'=SUMIFS({A(f"a{v}")},{A("lift")},{n},{A("fach")},">0")', fmt="#,##0.0", border=True)
+            put(ws, f"{c[3]}{r}", f"=SUMIFS({A(f'a{v}')},{A('lift')},{n},{A('lose')},1,{A('fach')},0)", fmt="#,##0.0", border=True)
+            put(ws, f"{c[4]}{r}", f"=IF(SUM({c[1]}{r}:{c[3]}{r})>0,{c[3]}{r}/SUM({c[1]}{r}:{c[3]}{r}),0)", fmt="0%", border=True)
         put(ws, f"{c[0]}37", "Total", bold=True, border=True)
-        put(ws, f"{c[1]}37", f"=SUM({c[1]}34:{c[1]}36)", fmt="#,##0.0", bold=True, border=True)
-        put(ws, f"{c[2]}37", f"=SUM({c[2]}34:{c[2]}36)", fmt="#,##0.0", bold=True, border=True)
-        put(ws, f"{c[3]}37", f"=IF({c[1]}37+{c[2]}37>0,{c[2]}37/({c[1]}37+{c[2]}37),0)", fmt="0%", bold=True, border=True)
+        for j in (1, 2, 3):
+            put(ws, f"{c[j]}37", f"=SUM({c[j]}34:{c[j]}36)", fmt="#,##0.0", bold=True, border=True)
+        put(ws, f"{c[4]}37", f"=IF(SUM({c[1]}37:{c[3]}37)>0,{c[3]}37/SUM({c[1]}37:{c[3]}37),0)", fmt="0%", bold=True, border=True)
+        ws.row_dimensions[33].height = 30
     for i in range(1, 20):
         ws.column_dimensions[L(i)].width = 3 if i in (1, 7, 13) else 12
     for v in (1, 2, 3):
@@ -849,9 +946,10 @@ def build(D, old):
     for j, h in enumerate(sh):
         put(ws, f"{L(j + 1)}4", h, bold=True, fill=SUB, wrap=True, border=True, align="center")
 
-    def area_expr(G, Q):
-        """Fläche je Artikel als Array-Ausdruck. G = Anzahl Gebinde, Q = Menge (für lose)."""
-        return f"((1-A_LOSE)*{G}*A_GAREA+A_LOSE*({Q}>0)*A_LA*(1+(A_IST>0)*({Q}>A_IST)*({Q}/(A_IST+(A_IST=0))-1)))"
+    def area_expr(G, Q, V):
+        """Fläche je Artikel als Array-Ausdruck. G = Anzahl Gebinde, Q = Menge (für lose), V = Menge (Fach aus Liftbericht)."""
+        return (f"((A_FACH>0)*A_FACH*(1+(A_KAPR>0)*({V}>A_KAPR)*({V}/(A_KAPR+(A_KAPR=0))-1))"
+                f"+(A_FACH=0)*((1-A_LOSE)*{G}*A_GAREA+A_LOSE*({Q}>0)*A_LA*(1+(A_IST>0)*({Q}>A_IST)*({Q}/(A_IST+(A_IST=0))-1))))")
 
     def scen_exprs(var, x):
         if var == "Ist":
@@ -868,7 +966,7 @@ def build(D, old):
                 G = f"(A_FINF*A_FINN+(1-A_FINF)*({NB}+(A_ISTN>{NB})*(A_ISTN-{NB})))"
                 V = f"(A_FINF*A_FINV+(1-A_FINF)*({NB}*A_MPG_E+(A_IST>{NB}*A_MPG_E)*(A_IST-{NB}*A_MPG_E)))"
             Q = G  # lose: Menge pro Gebinde = 1
-        return area_expr(G, Q), V
+        return area_expr(G, Q, V), V
 
     srows = [("Ist", None)] + [("B", i) for i in range(8)] + [("C", i) for i in range(8)]
     for k, (var, i) in enumerate(srows):
@@ -940,6 +1038,35 @@ def build(D, old):
     ws.row_dimensions[4].height = 30
     ws.freeze_panes = "C5"
 
+    # ------------------------------------------------------------------ Liftbericht
+    ws = wsL
+    put(ws, "A1", "Liftbericht (Modula «Artikelbestand für Maschine»)", bold=True, size=14)
+    put(ws, "A2", "Nur zur Kontrolle – wird von build_tool.py aus input/*.prnx eingelesen. Fach-Kapazität = reservierter Platz im Lift.",
+        italic=True)
+    for j, h in enumerate(["Lift", "Artikel", "Bezeichnung", "Fach-Kapazität Stk", "Bestand Lift", "Hauptlager Export",
+                           "Bestandsmenge Export (G)", "Jahresanfang 2025 + G", "Fachfläche m² (Tool)"]):
+        put(ws, f"{L(j + 1)}4", h, bold=True, fill=SUB, wrap=True, border=True)
+    byn = {a["nr"]: a for a in arts}
+    for i, x in enumerate(D.get("lift_rows", [])):
+        r = 5 + i
+        a = byn.get(x["code"], {})
+        nx = a.get("xrow") is not None
+        for j, v in enumerate([x["lift"], x["code"], x["bez"], x["kap"], x["bestand"],
+                               a.get("hl") if nx else "– fehlt –", a.get("bm") if nx else None,
+                               (a.get("ja", 0) + a.get("bm", 0)) if nx else None]):
+            put(ws, f"{L(j + 1)}{r}", v, border=True)
+        put(ws, f"I{r}", f'=SUMIFS({RG("fach")},{RG("nr")},B{r})', fmt="0.000", border=True)
+    n = len(D.get("lift_rows", []))
+    if n:
+        put(ws, f"C{5 + n}", "Total", bold=True)
+        put(ws, f"D{5 + n}", f"=SUM(D5:D{4 + n})", bold=True)
+        put(ws, f"E{5 + n}", f"=SUM(E5:E{4 + n})", bold=True)
+        put(ws, f"I{5 + n}", f"=SUM(I5:I{4 + n})", bold=True, fmt="0.0")
+    for cc, w in zip("ABCDEFGHI", (6, 10, 30, 11, 10, 12, 12, 12, 12)):
+        ws.column_dimensions[cc].width = w
+    ws.row_dimensions[4].height = 30
+    ws.freeze_panes = "A5"
+
     # ------------------------------------------------------------------ Anleitung
     ws = wsI
     ws.column_dimensions["A"].width = 130
@@ -950,6 +1077,9 @@ def build(D, old):
         ("• Artikel: Fläche lose, Gebinde neu / Menge pro Gebinde neu, Lift manuell (1/2/3/Aussen), Ziel-LU Artikel, MAX final, Kommentar. Leer = Vorschlag gilt.", ""),
         ("• Parameter: Lifte (Tablare, Tablarmass, max. Ladehöhe), Ampel, Verbrauchszeitraum, Ist-Bestand-Quelle, LU-Liste, Zuordnung Hauptlager → Lift, Gebinde → Lift, Startwerte lose.", ""),
         ("• Neue Artikel: werden automatisch unten im Blatt «Artikel» mitgerechnet («Neu»). • Gebinde-Kategorie: Masse, neue Kategorien unten ergänzen.", ""),
+        ("Liftbericht (Modula)", "b"),
+        ("Artikel im Liftbericht (input/*.prnx) bekommen dessen Lift und Bestand. Ihr Platz = reserviertes Fach: Die gemessene Belegung (Parameter L5:L7, z. B. Lift 1 = 85 %) "
+         "wird im Verhältnis der Fach-Kapazität (Stk) auf die Artikel verteilt. In B/C wächst die Fläche erst, wenn MAX > Fach-Kapazität (Fläche × MAX / Kapazität).", ""),
         ("Varianten", "b"),
         ("A – Ist-Bestand: heutiger Bestand (unabhängig vom LU).", ""),
         ("B – Ziel-LU: MAX = Jahresverbrauch / Ziel-LU, mindestens MB + Losgrösse, aufgerundet auf ganze Gebinde. Zielzustand nach Abbau des Überbestands.", ""),
