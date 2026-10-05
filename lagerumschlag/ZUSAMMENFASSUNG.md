@@ -22,31 +22,38 @@ Spalte G «Bestandsmenge» ist bei **711 von 1'464 Artikeln negativ**, und zwar 
 - Ergebnis: Lift 1 «Ist» = **86 %** (85 % aus dem Bericht + 1 % für 107415).
 - Bestandsvergleich (42 Artikel): Der Liftbericht stimmt bei 17 Artikeln mit «Jahresanfang 2025 + G» überein, mit der Export-Bestandsmenge G nur bei 5. Das bestätigt, dass G nicht der Lagerbestand ist.
 
-## Szenarien (Auslastung Lift 1 / Lift 2 / Lift 3 / Lift 2+3 / Total)
+## Füllgrad über Gebinde → Tablare (neu ab Version 05.10.2026)
+- Gebindedaten aus der neuen Liste `input/Artikelstamm_Umschlag_2_20260623.csv`. Geprüft: 1'200 Artikel mit Gebinde, gleich wie in der Mai-Liste (nur 2 Artikel mit neuer Menge pro Gebinde: 103764, 106938). «Anzahl Gebinde» = AUFRUNDEN(Max/MpG) und «Alles Bestand» = AUFRUNDEN(Bestandsmenge/MpG) stimmen; 1 Abweichung (109201: Anzahl Gebinde leer). 2 Artikel ohne Menge pro Gebinde (105456, 111719).
+- Lift 1 ist in der Liste nicht erfasst (keine Gebinde) → Lift 1 weiterhin aus dem Liftbericht (85 % der Tablare).
+- **Rechenweg:** Gebinde je Tablar = beste Anordnung des Gebinde-Stellmasses auf dem Tablar 4'060 × 857 mm (längs oder quer) × Lagen. Tablare je Artikel = Anzahl Gebinde / Gebinde je Tablar. **Füllgrad = Tablare Bedarf / Tablare vorhanden (50 je Lift).**
+- Gebinde je Tablar (Standard): S21 414 · S22 198 · S32 132 · S33 66 · S41 52 · S51/S52 26 · S61–S63 12 · S71–S73 6 · S81–S83 3 · P20–P25 3.
+- **Neue Optionen:** Tablar-Ausnutzung (Parameter M21, z. B. 90 % = Reserve für Lücken) · Tablarmass von Lift 1/2/3 (M22) · im Blatt «Gebinde-Kategorie» je Gebinde Stellmass, Lagen (stapeln) und manuelle Anzahl je Tablar · lose Artikel als Tablar-Anteil je Hauptlager (KTL 0.03, PAL 0.15, LIFT1 1.0).
+
+## Szenarien (Füllgrad Lift 1 / Lift 2 / Lift 3 / Lift 2+3 / Total, in Tablaren)
 Mit Liftbericht, übrige Artikel Ist-Bestand = Export G (Standard):
 
 | | Lift 1 | Lift 2 | Lift 3 | 2+3 | Total | Passt? | Aussenlager |
 |---|---|---|---|---|---|---|---|
-| Ist | 86 % | 62 % | 15 % | 38 % | 54 % | JA | 0 m² |
-| B · LU 2 | 100 % | 191 % | 36 % | 113 % | 109 % | NEIN | 47 m² |
-| C · LU 2 | 100 % | 197 % | 37 % | 117 % | 111 % | NEIN | 60 m² |
-| B · LU 3 | 94 % | 174 % | 35 % | 105 % | 101 % | NEIN | 17 m² |
-| C · LU 3 | 94 % | 181 % | 37 % | 109 % | 104 % | NEIN | 31 m² |
+| Ist | 86 % | 73 % | 19 % | 46 % | 59 % | JA | 0 Tablare |
+| B · LU 2 | 100 % | 223 % | 47 % | 135 % | 123 % | NEIN | 35 Tablare |
+| C · LU 2 | 100 % | 231 % | 48 % | 140 % | 126 % | NEIN | 40 Tablare |
+| B · LU 3 | 94 % | 204 % | 46 % | 125 % | 114 % | NEIN | 25 Tablare |
+| C · LU 3 | 94 % | 212 % | 47 % | 130 % | 118 % | NEIN | 30 Tablare |
 
 Mit Liftbericht, übrige Artikel Ist-Bestand = Jahresanfang 2025 + G:
 
 | | Lift 1 | Lift 2 | Lift 3 | 2+3 | Total | Passt? |
 |---|---|---|---|---|---|---|
-| Ist | 86 % | 128 % | 34 % | 81 % | 83 % | JA (mit Ausgleich 2↔3) |
-| B · LU 2 | 100 % | 203 % | 36 % | 120 % | 113 % | NEIN |
-| C · LU 2 | 100 % | 222 % | 41 % | 131 % | 121 % | NEIN |
-| B · LU 3 | 94 % | 184 % | 35 % | 110 % | 104 % | NEIN |
-| C · LU 3 | 94 % | 203 % | 41 % | 122 % | 113 % | NEIN |
+| Ist | 86 % | 154 % | 44 % | 99 % | 95 % | JA (knapp, mit Ausgleich 2↔3) |
+| B · LU 2 | 100 % | 236 % | 47 % | 141 % | 127 % | NEIN |
+| C · LU 2 | 100 % | 259 % | 53 % | 156 % | 137 % | NEIN |
+| B · LU 3 | 94 % | 214 % | 46 % | 130 % | 118 % | NEIN |
+| C · LU 3 | 94 % | 238 % | 52 % | 145 % | 128 % | NEIN |
 
-Lift 1 ist bei LU 2 praktisch voll (100 %) und hat bei LU 3 noch 6 % Reserve. Engpass bleibt **Lift 2**: Dort landen die losen PAL-Artikel, Trennbleche und grossen Euroboxen. Lift 3 ist nur zu ~35–40 % belegt. Variante B passt im Standard **ab LU 5**, Variante C bei keinem LU bis 6.
+Engpass ist **Lift 2**. Treiber bei C · LU 2: lose Artikel (≈ 41 Tablare, geschätzt), Trennbleche S71 (≈ 34 Tablare, nur 6 je Tablar), S81 (≈ 12). Lift 3 (Kleinteile-Boxen) bleibt unter 55 %.
 
 ## Annahmen
-1. Lose Artikel: KTL 0.1 m², PAL 0.5 m², LIFT1 3.479 m² (1 Tablar), andere 0.5 m² je Artikel. Rund die Hälfte der belegten Fläche beruht auf diesen Schätzungen (Cockpit Zeilen 33–37).
+1. Lose Artikel: Tablar-Anteil je Artikel KTL 0.03, PAL 0.15, LIFT1 1.0, andere 0.15. In Lift 2 sind rund 35 % (Ist) bis 40 % (C · LU 2) der Tablare geschätzt (Cockpit Zeilen 33–37).
 2. Fehlt «Menge pro Gebinde» (2 Artikel, S71): Der ganze Ist-Bestand gilt als 1 Gebinde, mit Hinweis.
 3. Lagerwert = Menge × Preis GLD Aktuell. Hauptlager aus dem Kennzahlen-Auszug (23 Artikel haben im Artikelstamm ein anderes Hauptlager).
 4. MAX final und Ziel-LU je Artikel gelten in den Varianten B und C. MAX final ersetzt dort den berechneten Wert.
@@ -56,11 +63,11 @@ Lift 1 ist bei LU 2 praktisch voll (100 %) und hat bei LU 3 noch 6 % Reserve. En
 - Ist-Bestand (siehe oben). Für Lift 1 gilt jetzt der Liftbericht.
 - Die 85 % für Lift 1 sind als **Fläche** (bzw. belegte Tablare) interpretiert. Bitte bestätigen. Liftberichte für Lift 2 und 3 würden die Schätzung dort ebenfalls ersetzen.
 - MAX = Verbrauch / LU, **mindestens MB + LG**. Bei 1'249 Artikeln bestimmt MB + LG den Wert. Dadurch ist Variante B bei LU 2 rund 6.2 Mio. CHF wert. Ist «mindestens MB + LG» so gewollt, oder eher MB + LG/2?
-- Bei losen Artikeln mit kleinem Ist-Bestand wird die Fläche in B/C stark hochskaliert, z. B. 110820 Sicherungsscheibe: Ist 1, MAX 100 → 50 m². Gegebenenfalls eigene Flächen eintragen oder einen Gebinde-Typ zuweisen.
+- Bei losen Artikeln mit kleinem Ist-Bestand wird der Platz in B/C stark hochskaliert (Faktor MAX / Ist). Besser: Gebinde zuweisen (Spalte «Gebindekategorie neu») oder eigene Tablare eintragen.
 - Höhe: «max. Ladehöhe je Tablar» ist leer. Sobald sie eingetragen ist, erscheint bei zu hohen Gebinden der Hinweis «zu hoch für Tablar».
 
 ## Prüfung
-- LibreOffice-Neuberechnung: 80'110 Formeln, 0 Fehler (nach Einbau des Liftberichts).
+- LibreOffice-Neuberechnung: 80'193 Formeln, 0 Fehler (Tablar-Version). Regler-Tests erneut bestanden.
 - LU 2 → 3 senkt die Auslastung in B und C. Variante A bleibt unabhängig vom LU. C ≥ B und C ≥ Ist gilt bei jedem Artikel.
 - Ansicht 2/3 im Cockpit = Szenario-Zeile C·LU2 / C·LU3.
 - 5 Handrechnungen stimmen: 101749 (Lift 1, lose), 100058 (Lift 2, S71, ohne Ist), 107997 (Lift 3, S51), 002049 (lose PAL), 005101 (kein Verbrauch).
