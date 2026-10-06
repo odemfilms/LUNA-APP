@@ -100,6 +100,12 @@ Tablare = Gebinde / Gebinde je Tablar (Lagerplanung); Höhe je Tablar = Gebindeh
 - Ergebnis: Für 80 % reicht es, Artikel **ohne Verbrauch 2025** (IST-LU 0) ins DREIER zu geben – ganz (Ist) bzw. nur deren Überbestand (LU 2/3).
 - Artikelliste je Szenario im Blatt DREIER (Top 300 nach Lifthöhe), vollständig im Blatt Artikel (Spalten «DREIER Ist / LU 2 / LU 3 Stk»).
 
+## Blatt «Ergebnis je Artikel» (06.10.2026)
+- Eine Zeile je Artikel (gleiche Reihenfolge wie Blatt Artikel), filterbar: Stammdaten, Ist, IST-LU; MAX / Ø-Bestand / Gebinde bei 3 wählbaren Ziel-LUs (Standard 2 / 3 / 4);
+  **MAX gültig** (= MAX final, sonst MAX beim Entscheid-LU, Standard 3) → Wert fürs ERP, Quelle (MAX final / Ziel-LU Artikel / berechnet), Überbestand Stk/CHF;
+  **ins DREIER / vor Ort** gemäss DREIER-Szenario (Standard LU 3); Kommentar aus dem Blatt Artikel.
+- Vorgehen: Szenarien vergleichen → Ziel-LU festlegen → DREIER prüfen → Einkauf-Dashboard abarbeiten (MAX final) → «MAX gültig» exportieren.
+
 ## Annahmen
 1. Lose Artikel: Tablar-Anteil je Artikel KTL 0.03, PAL 0.15, LIFT1 1.0, andere 0.15. In Lift 2 sind rund 35 % (Ist) bis 40 % (C · LU 2) der Tablare geschätzt (Cockpit Zeilen 33–37).
 2. Fehlt «Menge pro Gebinde» (2 Artikel, S71): Der ganze Ist-Bestand gilt als 1 Gebinde, mit Hinweis.

@@ -447,7 +447,7 @@ def read_old(path):
     old = {}
     old["version"] = wf["Parameter"]["Z1"].value if "Parameter" in wf.sheetnames else None
     # Parameter: alle Zellen mit gelber Füllung
-    for sh in ("Parameter", "Cockpit", "Einkauf", "DREIER"):
+    for sh in ("Parameter", "Cockpit", "Einkauf", "DREIER", "Ergebnis je Artikel"):
         if sh in wf.sheetnames:
             d = {}
             for row in wf[sh].iter_rows():
@@ -530,6 +530,7 @@ def build(D, old):
     wsC.title = "Cockpit"
     wsE = wb.create_sheet("Einkauf")
     wsD = wb.create_sheet("DREIER")
+    wsR = wb.create_sheet("Ergebnis je Artikel")
     wsS = wb.create_sheet("Szenarien")
     wsA = wb.create_sheet("Artikel")
     wsP = wb.create_sheet("Parameter")
@@ -1587,6 +1588,113 @@ def build(D, old):
     ws.page_setup.fitToHeight = 0
     ws.sheet_properties.pageSetUpPr.fitToPage = True
 
+    # ------------------------------------------------------------------ Ergebnis je Artikel
+    ws = wsR
+    oldR = {} if (old or {}).get("version") != TOOL_VERSION else (old or {}).get("Ergebnis je Artikel", {})
+    put(ws, "A1", "Ergebnis je Artikel – MAX, Ø-Bestand, vor Ort und DREIER", bold=True, size=14, color="1F3864")
+    put(ws, "A2", "Gelb = wählbar. MAX = MB + Bestellmenge (mind. Losgrösse), Ø = (MB + MAX) / 2. «MAX gültig» = MAX final (Blatt Artikel) oder MAX beim "
+                  "Entscheid-LU → Wert fürs ERP. Vor Ort / DREIER gemäss gewähltem DREIER-Szenario. Filter in Zeile 5.", italic=True, color="595959")
+    RR0 = 6
+    A_ = lambda k, r: f"Artikel!{C[k]}{r}"
+    rcols = [("Artikel", "nr", None, 12), ("Bezeichnung", "bez", None, 30), ("Hauptlager", "hl", None, 8), ("Lager in Zukunft", "liz", None, 13),
+             ("Lift", "lift", None, 5), ("Gebinde", "geb_e", None, 7), ("Menge/ Gebinde", "mpg_e", "#,##0", 7), ("MB", "mbn", "#,##0", 6),
+             ("LG", "lgn", "#,##0", 6), ("Verbrauch 12 M", "verb", "#,##0", 8), ("Ist", "ist", "#,##0", 7), ("IST-LU", None, "0.00", 6),
+             ("Ist-Wert CHF", "istwert", "#,##0", 9)]
+    for j, (h, k, fm, w) in enumerate(rcols):
+        put(ws, f"{L(j + 1)}5", h, bold=True, fill=SUB, wrap=True, border=True, align="center")
+        ws.column_dimensions[L(j + 1)].width = w
+    c0 = len(rcols) + 1   # erste LU-Spalte
+    lu_defaults = (2, 3, 4)
+    for b in range(3):
+        cl = L(c0 + b * 3)
+        ws.merge_cells(f"{cl}3:{L(c0 + b * 3 + 2)}3")
+        put(ws, f"{L(c0 + b * 3)}4", "Ziel-LU", italic=True, size=8)
+        pin(ws, f"{L(c0 + b * 3 + 1)}4", lu_defaults[b], oldR, fmt="0.0", align="center", bold=True)
+        put(ws, f"{cl}3", f'="LU "&TEXT({L(c0 + b * 3 + 1)}4,"0.0")', bold=True, fill=HEAD, color="FFFFFF", align="center")
+        for j, h in enumerate(("MAX", "Ø-Bestand", "Gebinde bei MAX")):
+            put(ws, f"{L(c0 + b * 3 + j)}5", h, bold=True, fill=SUB, wrap=True, border=True, align="center")
+            ws.column_dimensions[L(c0 + b * 3 + j)].width = 8
+    ce = c0 + 9   # Entscheid-Block
+    ws.merge_cells(f"{L(ce)}3:{L(ce + 5)}3")
+    put(ws, f"{L(ce)}3", "Entscheid / ERP", bold=True, fill=HEAD, color="FFFFFF", align="center")
+    put(ws, f"{L(ce)}4", "Entscheid-LU", italic=True, size=8)
+    pin(ws, f"{L(ce + 1)}4", 3, oldR, fmt="0.0", align="center", bold=True)
+    for j, (h, w) in enumerate((("MAX final (Artikel)", 9), ("MAX gültig", 9), ("Ø gültig", 8), ("Überbestand Stk (Ist − MAX)", 10),
+                                ("Überbestand CHF", 10), ("Quelle", 9))):
+        put(ws, f"{L(ce + j)}5", h, bold=True, fill=SUB, wrap=True, border=True, align="center")
+        ws.column_dimensions[L(ce + j)].width = w
+    cd = ce + 6   # DREIER-Block
+    ws.merge_cells(f"{L(cd)}3:{L(cd + 2)}3")
+    put(ws, f"{L(cd)}3", "Vor Ort / DREIER", bold=True, fill=HEAD, color="FFFFFF", align="center")
+    put(ws, f"{L(cd)}4", "Szenario", italic=True, size=8)
+    pin(ws, f"{L(cd + 1)}4", "LU 3", oldR, align="center", bold=True)
+    dv = DataValidation(type="list", formula1="Parameter!$H$23:$H$25", allow_blank=False)
+    ws.add_data_validation(dv)
+    dv.add(f"{L(cd + 1)}4")
+    for j, (h, w) in enumerate((("ins DREIER Stk", 9), ("vor Ort (Lift) Stk", 9), ("Kommentar Diskussion", 30))):
+        put(ws, f"{L(cd + j)}5", h, bold=True, fill=SUB, wrap=True, border=True, align="center")
+        ws.column_dimensions[L(cd + j)].width = w
+    dvl2 = DataValidation(type="list", formula1="Parameter!$A$23:$A$30", allow_blank=False, showErrorMessage=False)
+    ws.add_data_validation(dvl2)
+    for b in range(3):
+        dvl2.add(f"{L(c0 + b * 3 + 1)}4")
+    dvl2.add(f"{L(ce + 1)}4")
+    ws.row_dimensions[5].height = 42
+    LUD = f"${L(ce + 1)}$4"
+    SZ = f"${L(cd + 1)}$4"
+    for i in range(RN - R0 + 1):
+        ar, r = R0 + i, RR0 + i
+        for j, (h, k, fm, w) in enumerate(rcols):
+            if k:
+                f = f'=IF({A_("nr", ar)}="","",{A_(k, ar)}{"&" + chr(34) * 2 if fm is None and k != "lift" else ""})'
+            else:
+                f = f'=IF(OR({A_("nr", ar)}="",N({A_("ist", ar)})<=0),"",{A_("verb", ar)}/{A_("ist", ar)})'
+            c = ws.cell(r, j + 1, f)
+            c.font = Font(name=FONT, size=9)
+            if fm:
+                c.number_format = fm
+        mb, lg, v, luo, mpg = A_("mbn", ar), A_("lgn", ar), A_("verb", ar), A_("luo", ar), A_("mpg_e", ar)
+        for b in range(3):
+            lu = f"{L(c0 + b * 3 + 1)}$4"
+            cm, ca, cg = (L(c0 + b * 3 + j) for j in range(3))
+            fs = [f'=IF($A{r}="","",ROUNDUP({mb}+MAX({lg},2*({v}/IF({luo}>0,{luo},MAX(0.1,{lu}))-{mb})),0))',
+                  f'=IF($A{r}="","",({mb}+{cm}{r})/2)',
+                  f'=IF($A{r}="","",IF({A_("lose", ar)}=1,"lose",ROUNDUP({cm}{r}/{mpg},0)))']
+            for j, f in enumerate(fs):
+                c = ws.cell(r, c0 + b * 3 + j, f)
+                c.font = Font(name=FONT, size=9)
+                c.number_format = "#,##0" if j != 1 else "#,##0.0"
+        maxd = f'ROUNDUP({mb}+MAX({lg},2*({v}/IF({luo}>0,{luo},MAX(0.1,{LUD}))-{mb})),0)'
+        fe = [f'=IF($A{r}="","",IF({A_("finf", ar)}=1,{A_("finv", ar)},""))',
+              f'=IF($A{r}="","",IF({A_("finf", ar)}=1,{A_("finv", ar)},{maxd}))',
+              f'=IF($A{r}="","",({mb}+{L(ce + 1)}{r})/2)',
+              f'=IF($A{r}="","",MAX(0,$K{r}-{L(ce + 1)}{r}))',
+              f'=IF($A{r}="","",{L(ce + 3)}{r}*{A_("preis", ar)})',
+              f'=IF($A{r}="","",IF({A_("finf", ar)}=1,"MAX final",IF({luo}>0,"Ziel-LU Artikel","berechnet")))']
+        for j, f in enumerate(fe):
+            c = ws.cell(r, ce + j, f)
+            c.font = Font(name=FONT, size=9, bold=(j == 1))
+            c.number_format = "#,##0" if j != 2 else "#,##0.0"
+        fd = [f'=IF($A{r}="","",IF({A_("hI", ar)}="",0,CHOOSE(MATCH({SZ},Parameter!$H$23:$H$25,0),{A_("dq0", ar)},{A_("dq1", ar)},{A_("dq2", ar)})))',
+              f'=IF($A{r}="","",IF(OR($E{r}="-",$E{r}="Aussen"),0,$K{r}-{L(cd)}{r}))',
+              f'=IF($A{r}="","",IF({A_("komm", ar)}="","",{A_("komm", ar)}))']
+        for j, f in enumerate(fd):
+            c = ws.cell(r, cd + j, f)
+            c.font = Font(name=FONT, size=9)
+            if j < 2:
+                c.number_format = "#,##0"
+    rlast = RR0 + RN - R0
+    for j in range(ce + 1, ce + 2):
+        for rr in range(RR0, rlast + 1):
+            ws.cell(rr, j).fill = PatternFill("solid", fgColor="E2EFDA")
+    ws.conditional_formatting.add(f"L{RR0}:L{rlast}", CellIsRule(operator="lessThan", formula=["1"], fill=RED_F))
+    ws.conditional_formatting.add(f"{L(ce + 3)}{RR0}:{L(ce + 3)}{rlast}", CellIsRule(operator="greaterThan", formula=["0"], fill=ORANGE_F))
+    ws.conditional_formatting.add(f"{L(cd)}{RR0}:{L(cd)}{rlast}", CellIsRule(operator="greaterThan", formula=["0"], fill=RED_F))
+    ws.auto_filter.ref = f"A5:{L(cd + 2)}{rlast}"
+    ws.freeze_panes = "C6"
+    ws.sheet_properties.tabColor = "548235"
+    ws.sheet_view.zoomScale = 90
+
     # ------------------------------------------------------------------ Liftbericht
     ws = wsL
     put(ws, "A1", "Liftbericht (Modula «Artikelbestand für Maschine»)", bold=True, size=14)
@@ -1633,6 +1741,9 @@ def build(D, old):
         ("Parameter E27 = Ja: Die Spalte «Lift ausgeglichen» verteilt die Artikel so, dass alle 3 Lifte möglichst gleich voll sind – gleichzeitig für Ist, B und C bei LU 3 (Parameter im Skript: AUSGLEICH_LU): Liftbericht-Artikel "
          "bleiben in Lift 1, Trennbleche/Paletten nur in die ausfahrbaren Lifte 1 und 2, alles andere in den Lift mit dem tiefsten Füllgrad. Wird bei jedem Neuaufbau neu berechnet. "
          "«Lift manuell» hat Vorrang.", ""),
+        ("Ergebnis je Artikel", "b"),
+        ("Pro Artikel nebeneinander: MAX, Ø-Bestand und Gebinde bei 3 wählbaren Ziel-LUs; «MAX gültig» (MAX final oder MAX beim Entscheid-LU) = Wert fürs ERP; "
+         "Überbestand; Menge ins DREIER und vor Ort gemäss DREIER-Szenario. Mit Filter in Zeile 5 exportierbar.", ""),
         ("DREIER (Aussenlager)", "b"),
         ("Blatt «DREIER»: Damit die Lifte beim Ist-Bestand höchstens den Ziel-Füllgrad (Standard 80 %) haben, geht zuerst der Überbestand über dem MAX "
          "(bei LU 2 bzw. LU 3) ins DREIER, danach ganze Artikel mit dem tiefsten Umschlag. Ergebnis als Lifthöhe, ≈ Tablare, ≈ m², Wert und Artikelliste.", ""),
