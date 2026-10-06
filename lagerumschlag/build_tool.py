@@ -16,7 +16,7 @@ Ablauf:
     Die alte Datei wird vorher als Sicherung kopiert.
  3. Tool neu schreiben (nur Formeln, keine Makros) und mit LibreOffice berechnen.
 """
-import os, re, sys, shutil, datetime, subprocess, json, glob, gzip
+import os, re, sys, shutil, datetime, subprocess, json, glob, gzip, math
 import xml.etree.ElementTree as ET
 import pandas as pd
 import numpy as np
@@ -316,6 +316,82 @@ def schaetzklasse(bez, hl):
 # ============================================================================
 # Schritt 1: Datenbericht
 # ============================================================================
+# ============================================================================
+# Ausgeglichene Lift-Zuteilung (Vorschlag, Basis Ist-Bestand)
+# ============================================================================
+NUR_AUSFAHRBAR = ("S7", "S8", "P")   # Trennbleche / Paletten nur in Lift 1 + 2 (ausfahrbar)
+AUSGLEICH_LU = 3                      # Basis der ausgeglichenen Zuteilung: max(Ist, Ziel-Ø bei diesem LU) = Variante C
+
+
+def mengen(a, lu=AUSGLEICH_LU):
+    """(Ist, Ø Variante B, Variante C) – wie im Excel (Platz = Ø-Bestand)."""
+    ist = max(0.0, a["ja"] + a["bm"]) if a.get("xrow") is not None else max(0.0, a["bm"])
+    if a.get("best_rep") is not None:
+        ist = a["best_rep"]
+    mb, lg, v = a.get("mb") or 0, a.get("lg") or 0, a.get("verbx") or 0   # Verbrauch = 12 Monate (Zeitraum 2025)
+    mx = math.ceil(mb + max(lg, 2 * (v / lu - mb)))
+    avg = (mb + mx) / 2
+    return ist, (ist, math.ceil(avg), math.ceil(max(avg, ist)))
+
+
+def hoehen_mm(a, zuschlag=35):
+    """Python-Nachbildung der Excel-Rechnung: Höhe im Lift (mm) je Szenario (Ist, B, C)."""
+    ist, qs = mengen(a)
+    geb, mpg = a["geb"], a.get("mpg") or 0
+    if geb == "LOSE":
+        kl = schaetzklasse(a["bez"], a["hl"])
+        geb, mpg = {k: (g, m) for k, g, m, _ in KLASSEN_DEFAULT}[kl]
+        mpg = max(mpg, ist, a.get("lg") or 0)
+    if mpg <= 0:
+        mpg = max(1.0, ist)
+    gpt, hcm = PLAN_GPT.get(geb), PLAN_HCM.get(geb)
+    if not gpt:
+        return geb, (0.0, 0.0, 0.0)
+    return geb, tuple(math.ceil(q / mpg) / gpt * (hcm * 10 + zuschlag) if q > 0 else 0.0 for q in qs)
+
+
+def regel_lift(a):
+    if a.get("lift_rep") is not None:
+        return a["lift_rep"]
+    z = dict(LIZ_DEFAULT).get(a.get("liz")) if a.get("liz") else None
+    if z is None:
+        z = {k: g for k, g, _ in PARAM_HL_DEFAULT}.get(a["hl"], "Nein")
+    if z == "Nein":
+        return None
+    if z == "2+3":
+        return 2 if "grosser Artikel" in (a.get("bem") or "") else dict(GEB_LIFT_DEFAULT).get(a["geb"], 2)
+    return z
+
+
+def ausgleichen(arts, kap=(11900, 11900, 11900), lift1_heute=0.85):
+    """Greedy (grösste zuerst): jeder Artikel in den erlaubten Lift, der danach den tiefsten höchsten Füllgrad
+    über die Szenarien Ist / B / C (Ziel-LU AUSGLEICH_LU) hat. Liftbericht-Artikel bleiben in Lift 1."""
+    last = {l: [0.0, 0.0, 0.0] for l in (1, 2, 3)}
+    res, todo = {}, []
+    fach = [a for a in arts if a.get("lift_rep") == 1 and a.get("kap_rep")]
+    skap = sum(a["kap_rep"] for a in fach) or 1
+    for a in fach:   # Fächer aus dem Liftbericht: gemessene Belegung, wächst wenn Menge > Fach-Kapazität
+        _, qs = mengen(a)
+        for i, q in enumerate(qs):
+            last[1][i] += lift1_heute * kap[0] * a["kap_rep"] / skap * max(1.0, q / a["kap_rep"])
+        res[a["nr"]] = 1
+    for a in arts:
+        if a["nr"] in res or regel_lift(a) is None:
+            continue
+        geb, hs = hoehen_mm(a)
+        erlaubt = (1, 2) if geb.startswith(NUR_AUSFAHRBAR) else (1, 2, 3)
+        todo.append((hs, a["nr"], erlaubt, regel_lift(a)))
+    for hs, nr, erlaubt, l in sorted(todo, key=lambda x: -max(x[0])):
+        def score(x):   # zuerst Ist und Zielzustand B, dann Übergang C ausgleichen
+            f = [(last[x][i] + hs[i]) / kap[x - 1] for i in range(3)]
+            return (round(max(f[0], f[1]), 3), round(f[2], 3), x != l)
+        best = min(erlaubt, key=score)
+        for i in range(3):
+            last[best][i] += hs[i]
+        res[nr] = best
+    return res, {l: [round(v / kap[l - 1] * 100) for v in last[l]] for l in last}
+
+
 def bericht(D):
     a = pd.DataFrame(D["arts"])
     out = []
@@ -642,7 +718,8 @@ def build(D, old):
     dv = DataValidation(type="list", formula1='"Ja,Nein"', allow_blank=False)
     ws.add_data_validation(dv)
     dv.add("E27")
-    put(ws, "D28", "Ja = Artikel dürfen in jeden Lift; «Passt?» und Aussenlager über die Summe aller 3 Lifte.", italic=True)
+    put(ws, "D28", "Ja = Lifte ausgeglichen befüllt (Spalte «Lift ausgeglichen»: Liftbericht bleibt in Lift 1, Trennbleche nur Lift 1/2, "
+                   "sonst so, dass Ist, B und C bei LU 3 möglichst gleichmässig verteilt sind); «Passt?» über die Summe aller 3 Lifte. Nein = Regel nach Gebinde.", italic=True)
     put(ws, "D30", "Platzbedarf rechnen mit", bold=True)
     pin(ws, "E30", "Ø-Bestand", oldP)
     dv = DataValidation(type="list", formula1='"Ø-Bestand,MAX-Bestand"', allow_blank=False)
@@ -776,6 +853,7 @@ def build(D, old):
     col("geb_neu", "Gebindekategorie neu", 9, "i"); col("mpg_neu", "Menge pro Gebinde neu", 9, "i")
     col("liftr", "Lift lt. Liftbericht", 7); col("kapr", "Fach-Kapazität Stk (Liftbericht)", 8, fmt="#,##0")
     col("bestr", "Bestand lt. Liftbericht", 8, fmt="#,##0")
+    col("lausg", "Lift ausgeglichen", 7)
     col("lift_vor", "Lift Vorschlag", 7, "f"); col("lift_in", "Lift manuell", 7, "i")
     col("lu_art", "Ziel-LU Artikel", 7, "i", fmt="0.0")
     col("maxb", "MAX Variante B (Ansicht 2)", 10, "f", fmt="#,##0"); col("maxc", "MAX Variante C (Ansicht 2)", 10, "f", fmt="#,##0")
@@ -830,9 +908,10 @@ def build(D, old):
         "gpt": f'=IF(@lose@=1,0,IFERROR(VLOOKUP(@geb_e@,{GEB_RNG},13,0)+0,0))',
         "zgrp": (f'=IF(AND(Parameter!$B$19="Ja",@liz@<>"",ISNUMBER(MATCH(@liz@,{LIZT_K},0))),VLOOKUP(@liz@,{LIZT},2,0),'
                  f'IFERROR(VLOOKUP(@hl@,{HLT},2,0),"Nein"))'),
-        "lift_vor": (f'=IF(@nr@="","",IF(AND(Parameter!$B$21="Ja",ISNUMBER(@liftr@)),@liftr@,IF(@zgrp@="2+3",'
+        "lift_vor": (f'=IF(@nr@="","",IF(AND(Parameter!$B$21="Ja",ISNUMBER(@liftr@)),@liftr@,'
+                     f'IF(AND(Parameter!$E$27="Ja",ISNUMBER(@lausg@),@zgrp@<>"Nein"),@lausg@,IF(@zgrp@="2+3",'
                      f'IF(ISNUMBER(SEARCH("grosser Artikel",@bem@)),2,IFERROR(VLOOKUP(@geb_e@,{GLT},2,0),2)),'
-                     f'IF(OR(@zgrp@="Nein",@zgrp@=""),"-",@zgrp@))))'),
+                     f'IF(OR(@zgrp@="Nein",@zgrp@=""),"-",@zgrp@)))))'),
         "maxb": "=@b2@",
         "maxc": "=MAX(@b2@,@ist@)",
         "hint": ('=IF(@nr@="","",IF(@neu@=1,"Neu; ","")'
@@ -930,7 +1009,8 @@ def build(D, old):
                                 and (a["hl"] in ("KTL", "PAL") or str(a.get("liz", "")).startswith("Kardex")) else None),
                         mpg=a["mpg"], ursache=a["ursache"] or None, aktion=a["aktion"] or None,
                         bm=a["bm"], ja=a["ja"], bwx=a["bwx"], verbx=a["verbx"], bem=a["bem"], neu=0,
-                        liftr=a.get("lift_rep"), kapr=a.get("kap_rep"), bestr=a.get("best_rep"))
+                        liftr=a.get("lift_rep"), kapr=a.get("kap_rep"), bestr=a.get("best_rep"),
+                        lausg=D.get("ausg", {}).get(a["nr"]))
             prev = oldA.get(a["nr"], {})
         else:
             nr_ = f"{NA}$A${5 + a}"
@@ -1298,6 +1378,10 @@ def build(D, old):
         ("Liftbericht (Modula)", "b"),
         ("Artikel im Liftbericht (input/*.prnx) bekommen dessen Lift und Bestand. Ihr Platz = reserviertes Fach: Die gemessene Belegung (Parameter L5:L7, z. B. Lift 1 = 85 % "
          "der Tablare) wird im Verhältnis der Fach-Kapazität (Stk) auf die Artikel verteilt. In B/C wächst der Bedarf erst, wenn MAX > Fach-Kapazität.", ""),
+        ("Lifte mischen / ausgleichen", "b"),
+        ("Parameter E27 = Ja: Die Spalte «Lift ausgeglichen» verteilt die Artikel so, dass alle 3 Lifte möglichst gleich voll sind – gleichzeitig für Ist, B und C bei LU 3 (Parameter im Skript: AUSGLEICH_LU): Liftbericht-Artikel "
+         "bleiben in Lift 1, Trennbleche/Paletten nur in die ausfahrbaren Lifte 1 und 2, alles andere in den Lift mit dem tiefsten Füllgrad. Wird bei jedem Neuaufbau neu berechnet. "
+         "«Lift manuell» hat Vorrang.", ""),
         ("Lose Artikel grob geschätzt", "b"),
         ("Artikel ohne Gebinde (KTL/PAL) bekommen aus der Bezeichnung eine Schätzklasse: Klein = Eurobox S51 à 20 Stk, Mittel = S61 à 4 Stk, Gross = Trennblech S81 à 2 Stk "
          "(Parameter I27:K29); mindestens der Ist-Bestand bzw. eine Losgrösse passt in 1 Gebinde. Damit rechnen sie wie Gebinde-Artikel. Klasse im Blatt Artikel änderbar; «Gebindekategorie neu» oder «Tablare lose» haben Vorrang. Kein Stapeln.", ""),
@@ -1393,6 +1477,8 @@ def main():
         print(f"Sicherung: {bak}")
     print("Eingaben übernommen:" if old else "Kein bestehendes Tool gefunden – neu erstellt.",
           {k: len(v) for k, v in (old or {}).items()})
+    D["ausg"], last = ausgleichen(D["arts"])
+    print(f"Ausgeglichene Zuteilung, Füllgrad % je Lift [Ist, B, C] bei LU {AUSGLEICH_LU}:", last)
     wb, C = build(D, old)
     wb.calculation.fullCalcOnLoad = True
     wb.save(OUTPUT_FILE)

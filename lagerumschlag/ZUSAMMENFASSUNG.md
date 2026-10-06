@@ -69,6 +69,17 @@ Tablare = Gebinde / Gebinde je Tablar (Lagerplanung); Höhe je Tablar = Gebindeh
 - Abgleich mit der Liste (1'184 Gebinde-Artikel): Gebinde Liste Bestand 1'659 / Tool Ist 1'752; Liste «Alles max» 1'806 / Tool C · LU 4 1'872. Auch die Liste hat beim «Max» mehr Wert (5.12 Mio.) als beim Bestand (3.57 Mio.) – gleiche Logik wie Variante C.
 - Überbestand (Ist > MAX): 818 Artikel, 1.32 Mio. CHF → das ist das Abbaupotenzial.
 
+## Lifte ausgeglichen befüllt (06.10.2026)
+- Vorher: starre Regel nach Gebinde → Lift 3 nur BITO/Euroboxen bis 400×300 (46 %), Lift 2 alle 600×400-Boxen + Trennbleche (123 %), Lift 1 alle «Kardex Schwer» (107 %). «Mischen» hatte nur die Summe beurteilt.
+- Neu (Parameter E27 = Ja): Spalte «Lift ausgeglichen» – Liftbericht-Artikel bleiben in Lift 1 (85 % heute, 90 % bei Ziel-LU), Trennbleche/Paletten nur in die ausfahrbaren Lifte 1 + 2, alles andere so verteilt, dass zuerst Ist und Zielzustand B, dann der Übergang C bei LU 3 möglichst gleichmässig sind. «Lift manuell» hat Vorrang.
+
+| | Lift 1 | Lift 2 | Lift 3 | Total | Passt? |
+|---|---|---|---|---|---|
+| Ist | 92 % | 87 % | 97 % | 92 % | JA |
+| B · LU 3 | 97 % | 97 % | 95 % | 96 % | JA |
+| B · LU 4 | 95 % | 88 % | 90 % | 91 % | JA |
+| C · LU 3 | 97 % | 120 % | 114 % | 110 % | NEIN (Übergang) |
+
 ## Annahmen
 1. Lose Artikel: Tablar-Anteil je Artikel KTL 0.03, PAL 0.15, LIFT1 1.0, andere 0.15. In Lift 2 sind rund 35 % (Ist) bis 40 % (C · LU 2) der Tablare geschätzt (Cockpit Zeilen 33–37).
 2. Fehlt «Menge pro Gebinde» (2 Artikel, S71): Der ganze Ist-Bestand gilt als 1 Gebinde, mit Hinweis.
