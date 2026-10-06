@@ -447,7 +447,7 @@ def read_old(path):
     old = {}
     old["version"] = wf["Parameter"]["Z1"].value if "Parameter" in wf.sheetnames else None
     # Parameter: alle Zellen mit gelber Füllung
-    for sh in ("Parameter", "Cockpit", "Einkauf"):
+    for sh in ("Parameter", "Cockpit", "Einkauf", "DREIER"):
         if sh in wf.sheetnames:
             d = {}
             for row in wf[sh].iter_rows():
@@ -512,6 +512,7 @@ GEB_LIFT_DEFAULT = [(c, 3) for c in ("S21", "S22", "S32", "S33", "S41", "S51", "
                    [(c, 2) for c in ("S61", "S62", "S63", "S71", "S72", "S73", "S81", "S82", "S83",
                                      "P20", "P21", "P22", "P23", "P24", "P25", "LOSE")]
 LU_LIST = [2, 2.5, 3, 3.5, 4, 5, 6, 8]
+DREIER_SZ = ["Ist", "LU 2", "LU 3"]
 EINKAUF_SORT = ["Kombiniert (Platz + Wert + tiefer LU)", "Grösste Lagerfläche", "Höchster Lagerwert", "Tiefster Umschlag",
                 "Grösstes Abbaupotenzial"]
 VARIANTS = ["A – Ist-Bestand", "B – Ziel-LU", "C – Ziel-LU oder Ist"]
@@ -528,6 +529,7 @@ def build(D, old):
     wsC = wb.active
     wsC.title = "Cockpit"
     wsE = wb.create_sheet("Einkauf")
+    wsD = wb.create_sheet("DREIER")
     wsS = wb.create_sheet("Szenarien")
     wsA = wb.create_sheet("Artikel")
     wsP = wb.create_sheet("Parameter")
@@ -655,6 +657,9 @@ def build(D, old):
         pin(ws, f"A{23 + i}", v, oldP, fmt="0.0")
     for i, v in enumerate(VARIANTS):
         put(ws, f"D{23 + i}", v)
+    put(ws, "H22", "DREIER (nicht ändern)", bold=True, size=11)
+    for i, v in enumerate(DREIER_SZ):
+        put(ws, f"H{23 + i}", v)
     put(ws, "G22", "Einkauf: Sortierung (nicht ändern)", bold=True, size=11)
     for i, v in enumerate(EINKAUF_SORT):
         put(ws, f"G{23 + i}", v)
@@ -872,6 +877,8 @@ def build(D, old):
         col(f"ant{v}", f"A{v} Anteil im Lift (Hilfe)", 7, "f", 2, "0%")
     for v in (1, 2, 3):
         col(f"loc{v}", f"Lagerort Ansicht {v}", 11, "f")
+    for k, nm in enumerate(DREIER_SZ):
+        col(f"dq{k}", f"DREIER {nm} Stk", 9, "f", fmt="#,##0")
     col("hint", "Hinweise", 45, "f"); col("ursache", "Ursache (Kennzahlen)", 30); col("aktion", "Aktion (Kennzahlen)", 30)
     col("komm", "Kommentar Diskussion", 30, "i")
     # Hilfsspalten
@@ -887,7 +894,7 @@ def build(D, old):
                     ("hI", "Einkauf: Höhe Ist mm", "#,##0"), ("luI", "Einkauf: IST-LU", "0.00"), ("wI", "Einkauf: Ist-Wert", "#,##0"),
                     ("avgD", "Einkauf: Ziel-Ø", "#,##0.0"), ("abbau", "Einkauf: Abbaupotenzial CHF", "#,##0"),
                     ("frei", "Einkauf: Platz frei mm", "#,##0"), ("score", "Einkauf: Priorität (0–3)", "0.00"),
-                    ("ekey", "Einkauf: Sortierschlüssel", "0.000000")]:
+                    ("ekey", "Einkauf: Sortierschlüssel", "0.000000"), ("mx0", "DREIER 0: MAX", "#,##0"), ("ho0", "DREIER 0: Höhe Überbestand", "#,##0"), ("cuo0", "DREIER 0: Überbestand kumuliert", "#,##0"), ("he0", "DREIER 0: Überbestand raus", "#,##0"), ("r0", "DREIER 0: Höhe Rest", "#,##0"), ("cu0", "DREIER 0: kumuliert (tiefer LU zuerst)", "#,##0"), ("mv0", "DREIER 0: ganz raus (1/0)", "0"), ("dh0", "DREIER 0: Höhe raus", "#,##0"), ("dw0", "DREIER 0: Wert raus", "#,##0"), ("mx1", "DREIER 1: MAX", "#,##0"), ("ho1", "DREIER 1: Höhe Überbestand", "#,##0"), ("cuo1", "DREIER 1: Überbestand kumuliert", "#,##0"), ("he1", "DREIER 1: Überbestand raus", "#,##0"), ("r1", "DREIER 1: Höhe Rest", "#,##0"), ("cu1", "DREIER 1: kumuliert (tiefer LU zuerst)", "#,##0"), ("mv1", "DREIER 1: ganz raus (1/0)", "0"), ("dh1", "DREIER 1: Höhe raus", "#,##0"), ("dw1", "DREIER 1: Wert raus", "#,##0"), ("mx2", "DREIER 2: MAX", "#,##0"), ("ho2", "DREIER 2: Höhe Überbestand", "#,##0"), ("cuo2", "DREIER 2: Überbestand kumuliert", "#,##0"), ("he2", "DREIER 2: Überbestand raus", "#,##0"), ("r2", "DREIER 2: Höhe Rest", "#,##0"), ("cu2", "DREIER 2: kumuliert (tiefer LU zuerst)", "#,##0"), ("mv2", "DREIER 2: ganz raus (1/0)", "0"), ("dh2", "DREIER 2: Höhe raus", "#,##0"), ("dw2", "DREIER 2: Wert raus", "#,##0"), ("dkey", "DREIER: Sortierschlüssel LU", "0.000000000"), ("dsk", "DREIER: Liste Schlüssel", "0.000000")]:
         col(k, h, 9, "f", 3, f)
     C = {c["key"]: L(i + 1) for i, c in enumerate(COLS)}
     KIND = {c["key"]: c["kind"] for c in COLS}
@@ -922,6 +929,38 @@ def build(D, old):
         "abbau": '=IF(@hI@="","",MAX(0,@ist@-@avgD@)*@preis@)',
         "frei": '=IF(@hI@="","",@hI@*MAX(0,1-@avgD@/@ist@))',
         "score": '=IF(@hI@="","",PERCENTRANK(#hI#,@hI@)+PERCENTRANK(#wI#,@wI@)+1-PERCENTRANK(#luI#,@luI@))',
+        "mx0": '=IF(@hI@="","",@ist@)',
+        "ho0": '=IF(@hI@="","",@hI@*MAX(0,@ist@-@mx0@)/@ist@)',
+        "cuo0": '=IF(@hI@="","",SUMIFS(#ho0#,#dkey#,"<"&@dkey@))',
+        "he0": '=IF(@hI@="","",IF(DREIER!$C$9="Alles",@ho0@,IF(@cuo0@<DREIER!$F$5,@ho0@,0)))',
+        "r0": '=IF(@hI@="","",@hI@-@he0@)',
+        "cu0": '=IF(@hI@="","",SUMIFS(#r0#,#dkey#,"<"&@dkey@))',
+        "mv0": '=IF(@hI@="","",IF(@cu0@<DREIER!$C$11,1,0))',
+        "dh0": '=IF(@hI@="","",@he0@+@mv0@*@r0@)',
+        "dq0": '=IF(@hI@="","",IF(@mv0@=1,@ist@,IF(@he0@>0,MAX(0,@ist@-@mx0@),0)))',
+        "dw0": '=IF(@hI@="","",@dq0@*@preis@)',
+        "mx1": '=IF(@hI@="","",ROUNDUP(@mbn@+MAX(@lgn@,2*(@verb@/MAX(0.1,N(DREIER!$C$6))-@mbn@)),0))',
+        "ho1": '=IF(@hI@="","",@hI@*MAX(0,@ist@-@mx1@)/@ist@)',
+        "cuo1": '=IF(@hI@="","",SUMIFS(#ho1#,#dkey#,"<"&@dkey@))',
+        "he1": '=IF(@hI@="","",IF(DREIER!$C$9="Alles",@ho1@,IF(@cuo1@<DREIER!$F$5,@ho1@,0)))',
+        "r1": '=IF(@hI@="","",@hI@-@he1@)',
+        "cu1": '=IF(@hI@="","",SUMIFS(#r1#,#dkey#,"<"&@dkey@))',
+        "mv1": '=IF(@hI@="","",IF(@cu1@<DREIER!$D$11,1,0))',
+        "dh1": '=IF(@hI@="","",@he1@+@mv1@*@r1@)',
+        "dq1": '=IF(@hI@="","",IF(@mv1@=1,@ist@,IF(@he1@>0,MAX(0,@ist@-@mx1@),0)))',
+        "dw1": '=IF(@hI@="","",@dq1@*@preis@)',
+        "mx2": '=IF(@hI@="","",ROUNDUP(@mbn@+MAX(@lgn@,2*(@verb@/MAX(0.1,N(DREIER!$C$7))-@mbn@)),0))',
+        "ho2": '=IF(@hI@="","",@hI@*MAX(0,@ist@-@mx2@)/@ist@)',
+        "cuo2": '=IF(@hI@="","",SUMIFS(#ho2#,#dkey#,"<"&@dkey@))',
+        "he2": '=IF(@hI@="","",IF(DREIER!$C$9="Alles",@ho2@,IF(@cuo2@<DREIER!$F$5,@ho2@,0)))',
+        "r2": '=IF(@hI@="","",@hI@-@he2@)',
+        "cu2": '=IF(@hI@="","",SUMIFS(#r2#,#dkey#,"<"&@dkey@))',
+        "mv2": '=IF(@hI@="","",IF(@cu2@<DREIER!$E$11,1,0))',
+        "dh2": '=IF(@hI@="","",@he2@+@mv2@*@r2@)',
+        "dq2": '=IF(@hI@="","",IF(@mv2@=1,@ist@,IF(@he2@>0,MAX(0,@ist@-@mx2@),0)))',
+        "dw2": '=IF(@hI@="","",@dq2@*@preis@)',
+        "dkey": '=IF(@hI@="","",@luI@+ROW()/1000000000)',
+        "dsk": '=IF(@hI@="","",IF(CHOOSE(MATCH(DREIER!$C$8,Parameter!$H$23:$H$25,0),@dh0@,@dh1@,@dh2@)>0,CHOOSE(MATCH(DREIER!$C$8,Parameter!$H$23:$H$25,0),@dh0@,@dh1@,@dh2@)+ROW()/1000000000,""))',
         "ekey": ('=IF(@hI@="","",CHOOSE(MATCH(Einkauf!$C$5,Parameter!$G$23:$G$27,0),@score@,@hI@,@wI@,-@luI@,@abbau@)+ROW()/1000000000)'),
         "verb": "=@verbx@*Parameter!$B$18",
         "gpt": f'=IF(@lose@=1,0,IFERROR(VLOOKUP(@geb_e@,{GEB_RNG},13,0)+0,0))',
@@ -1445,6 +1484,109 @@ def build(D, old):
     ws.sheet_properties.tabColor = "C00000"
     ws.sheet_view.zoomScale = 90
 
+    # ------------------------------------------------------------------ DREIER (Aussenlager)
+    ws = wsD
+    NLIST = 300
+    oldD = {} if (old or {}).get("version") != TOOL_VERSION else (old or {}).get("DREIER", {})
+    put(ws, "B1", "DREIER – was muss ins Aussenlager, damit die Lifte höchstens X % voll sind?", bold=True, size=16, color="1F3864")
+    put(ws, "B2", "Basis Ist-Bestand der Lift-Artikel. Schritt 1: Überbestand über dem MAX bei LU 2 / LU 3 geht ins DREIER. Schritt 2: reicht das nicht, "
+                  "gehen ganze Artikel mit dem tiefsten Umschlag (zuerst ohne Verbrauch) ins DREIER, bis der Ziel-Füllgrad erreicht ist. Lift-Artikel mit Bestand (ohne leere Fächer).", italic=True, color="595959")
+    put(ws, "B3", "Fläche: ≈ Tablare = Lifthöhe / Höhe je Tablar; ≈ m² = Tablare × Tablarfläche (4'060 × 857 mm = 3.48 m²). Artikel-Spalten «DREIER … Stk» im Blatt Artikel filterbar.",
+        italic=True, color="595959")
+    put(ws, "B5", "Ziel-Füllgrad Lifte (max.)", bold=True)
+    pin(ws, "C5", 0.8, oldD, fmt="0%", align="center")
+    put(ws, "B6", "Szenario LU 2 – Ziel-LU", bold=True)
+    pin(ws, "C6", 2, oldD, fmt="0.0", align="center")
+    put(ws, "B7", "Szenario LU 3 – Ziel-LU", bold=True)
+    pin(ws, "C7", 3, oldD, fmt="0.0", align="center")
+    put(ws, "B9", "Überbestand ins DREIER", bold=True)
+    pin(ws, "C9", "Nur bis Ziel-Füllgrad", oldD, align="center")
+    dv = DataValidation(type="list", formula1='"Nur bis Ziel-Füllgrad,Alles"', allow_blank=False)
+    ws.add_data_validation(dv)
+    dv.add("C9")
+    put(ws, "E5", "Überschuss heute über Ziel (mm)", bold=True)
+    put(ws, "F5", f"=MAX(0,SUM({RG('hI')})-DREIER!$C$5*Parameter!$H$8)", fmt="#,##0", bold=True)
+    put(ws, "E6", "«Nur bis Ziel»: Überbestand der Artikel mit tiefstem Umschlag zuerst, bis der Ziel-Füllgrad erreicht ist.", italic=True, color="595959")
+    put(ws, "B8", "Artikelliste unten für", bold=True)
+    pin(ws, "C8", "LU 3", oldD, align="center")
+    dv = DataValidation(type="list", formula1="Parameter!$H$23:$H$25", allow_blank=False)
+    ws.add_data_validation(dv)
+    dv.add("C8")
+    # Übersicht
+    heads = ["Kennzahl", "Ist", "LU 2", "LU 3"]
+    for j, h in enumerate(heads):
+        put(ws, f"{L(2 + j)}10", h, bold=True, fill=HEAD, color="FFFFFF", align="center", border=True)
+    T = "(DREIER!$C$5*Parameter!$H$8)"
+    rows_ = [
+        ("Überschuss über Ziel nach Schritt 1 (mm)", lambda k: f"=MAX(0,SUM({RG(f'r{k}')})-{T})", "#,##0"),
+        ("Lifte heute (Ist) mm", lambda k: f"=SUM({RG('hI')})", "#,##0"),
+        ("Lifte heute Füllgrad", lambda k: f"={L(3 + k)}12/Parameter!$H$8", "0%"),
+        ("Schritt 1 – Überbestand ins DREIER (mm)", lambda k: f"=SUM({RG(f'he{k}')})", "#,##0"),
+        ("Schritt 2 – tiefer LU ins DREIER (mm)", lambda k: f"=SUMIFS({RG(f'r{k}')},{RG(f'mv{k}')},1)", "#,##0"),
+        ("DREIER total Lifthöhe mm", lambda k: f"={L(3 + k)}14+{L(3 + k)}15", "#,##0"),
+        ("DREIER ≈ Tablare", lambda k: f"={L(3 + k)}16/Parameter!$M$24", "#,##0.0"),
+        ("DREIER ≈ Fläche m² (Tablarfläche)", lambda k: f"={L(3 + k)}17*Parameter!$J$6", "#,##0.0"),
+        ("DREIER Lagerwert CHF", lambda k: f"=SUM({RG(f'dw{k}')})", "#,##0"),
+        ("Artikel ganz ins DREIER", lambda k: f"=COUNTIFS({RG(f'mv{k}')},1)", "#,##0"),
+        ("Artikel mit Teilmenge (nur Überbestand)", lambda k: f'=COUNTIFS({RG(f"he{k}")},">0",{RG(f"mv{k}")},0)', "#,##0"),
+        ("Lifte nachher mm", lambda k: f"={L(3 + k)}12-{L(3 + k)}16", "#,##0"),
+        ("Lifte nachher Füllgrad", lambda k: f"={L(3 + k)}22/Parameter!$H$8", "0%"),
+        ("höchster IST-LU, der (teilweise) ins DREIER geht", lambda k: f'=IFERROR(_xlfn.MAXIFS({RG("luI")},{RG(f"dh{k}")},">0"),0)', "0.00"),
+    ]
+    for i, (lbl, fn, fm) in enumerate(rows_):
+        r = 11 + i
+        put(ws, f"B{r}", lbl, border=True, bold=i in (5, 7, 8, 12))
+        for k in range(3):
+            put(ws, f"{L(3 + k)}{r}", fn(k), fmt=fm, border=True, bold=i in (5, 7, 8, 12), align="right")
+    for r in (16, 17, 18, 19):
+        for k in range(3):
+            ws[f"{L(3 + k)}{r}"].fill = ORANGE_F
+    for k in range(3):
+        ws[f"{L(3 + k)}23"].fill = GREEN_F
+    # Artikelliste
+    put(ws, "B27", '="Artikel ins DREIER – Szenario "&C8&" (sortiert nach Lifthöhe, max. ' + str(NLIST) + ' Zeilen)"', bold=True, size=12)
+    hl_ = ["Rang", "Artikel", "Bezeichnung", "Lift", "Gebinde", "IST-LU", "Ist Stk", "MAX Stk", "DREIER Stk", "Rest im Lift Stk",
+           "Grund", "DREIER mm", "≈ Tablare", "≈ m²", "DREIER Wert CHF"]
+    for j, h in enumerate(hl_):
+        put(ws, f"{L(2 + j)}28", h, bold=True, fill=HEAD, color="FFFFFF", wrap=True, align="center", border=True)
+    ws.row_dimensions[28].height = 30
+    KSEL = 'MATCH($C$8,Parameter!$H$23:$H$25,0)'
+    for i in range(NLIST):
+        r = 29 + i
+        put(ws, f"B{r}", i + 1, border=True, align="center", size=9)
+        put(ws, f"R{r}", f'=IFERROR(MATCH(LARGE({RG("dsk")},B{r}),{RG("dsk")},0),"")', color="FFFFFF")
+        ix = lambda k_: f'INDEX({RG(k_)},$R{r})'
+        cells = {
+            "C": f'=IF($R{r}="","",{ix("nr")})', "D": f'=IF($R{r}="","",{ix("bez")})', "E": f'=IF($R{r}="","",{ix("lift")})',
+            "F": f'=IF($R{r}="","",{ix("geb_e")})', "G": f'=IF($R{r}="","",{ix("luI")})', "H": f'=IF($R{r}="","",{ix("ist")})',
+            "I": f'=IF($R{r}="","",CHOOSE({KSEL},"–",{ix("mx1")},{ix("mx2")}))',
+            "J": f'=IF($R{r}="","",CHOOSE({KSEL},{ix("dq0")},{ix("dq1")},{ix("dq2")}))',
+            "K": f'=IF($R{r}="","",H{r}-J{r})',
+            "L": f'=IF($R{r}="","",IF(CHOOSE({KSEL},{ix("mv0")},{ix("mv1")},{ix("mv2")})=1,"tiefer LU – ganz","Überbestand"))',
+            "M": f'=IF($R{r}="","",CHOOSE({KSEL},{ix("dh0")},{ix("dh1")},{ix("dh2")}))',
+            "N": f'=IF($R{r}="","",M{r}/{ix("hpt")})', "O": f'=IF($R{r}="","",N{r}*Parameter!$J$6)',
+            "P": f'=IF($R{r}="","",CHOOSE({KSEL},{ix("dw0")},{ix("dw1")},{ix("dw2")}))',
+        }
+        fm_ = {"G": "0.00", "H": "#,##0", "I": "#,##0", "J": "#,##0", "K": "#,##0", "M": "#,##0", "N": "0.0", "O": "0.0", "P": "#,##0"}
+        for cl, f in cells.items():
+            put(ws, f"{cl}{r}", f, border=True, size=9, fmt=fm_.get(cl))
+    lr = 28 + NLIST
+    ws.conditional_formatting.add(f"L29:L{lr}", CellIsRule(operator="equal", formula=['"tiefer LU – ganz"'], fill=RED_F))
+    ws.conditional_formatting.add(f"L29:L{lr}", CellIsRule(operator="equal", formula=['"Überbestand"'], fill=ORANGE_F))
+    ws.conditional_formatting.add(f"M29:M{lr}", DataBarRule(start_type="min", end_type="max", color="5B9BD5", showValue=True))
+    put(ws, f"B{lr + 2}", f'="Angezeigt: "&COUNT(M29:M{lr})&" von "&COUNT({RG("dsk")})&" Artikeln. Vollständig: Blatt Artikel, Filter auf Spalte «DREIER … Stk» > 0."',
+        italic=True, color="595959")
+    for cl, w in zip("ABCDEFGHIJKLMNOPQR", (2, 34, 11, 11, 11, 8, 8, 8, 9, 9, 15, 10, 8, 8, 12, 2, 2, 2)):
+        ws.column_dimensions[cl].width = w
+    ws.column_dimensions["B"].width = 38
+    ws.column_dimensions["R"].hidden = True
+    ws.freeze_panes = "A29"
+    ws.sheet_properties.tabColor = "7030A0"
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+
     # ------------------------------------------------------------------ Liftbericht
     ws = wsL
     put(ws, "A1", "Liftbericht (Modula «Artikelbestand für Maschine»)", bold=True, size=14)
@@ -1491,6 +1633,9 @@ def build(D, old):
         ("Parameter E27 = Ja: Die Spalte «Lift ausgeglichen» verteilt die Artikel so, dass alle 3 Lifte möglichst gleich voll sind – gleichzeitig für Ist, B und C bei LU 3 (Parameter im Skript: AUSGLEICH_LU): Liftbericht-Artikel "
          "bleiben in Lift 1, Trennbleche/Paletten nur in die ausfahrbaren Lifte 1 und 2, alles andere in den Lift mit dem tiefsten Füllgrad. Wird bei jedem Neuaufbau neu berechnet. "
          "«Lift manuell» hat Vorrang.", ""),
+        ("DREIER (Aussenlager)", "b"),
+        ("Blatt «DREIER»: Damit die Lifte beim Ist-Bestand höchstens den Ziel-Füllgrad (Standard 80 %) haben, geht zuerst der Überbestand über dem MAX "
+         "(bei LU 2 bzw. LU 3) ins DREIER, danach ganze Artikel mit dem tiefsten Umschlag. Ergebnis als Lifthöhe, ≈ Tablare, ≈ m², Wert und Artikelliste.", ""),
         ("Einkauf (Dashboard)", "b"),
         ("Zeigt die 50 Lift-Artikel mit Bestand, die zuerst angegangen werden sollten. Sortierung wählbar: kombiniert (Platz + Wert + tiefer Umschlag), Fläche, Wert, "
          "tiefster Umschlag oder Abbaupotenzial. Abbaupotenzial = (Ist − Ziel-Ø bei gewähltem LU) × Preis; Platz frei ≈ anteilig.", ""),

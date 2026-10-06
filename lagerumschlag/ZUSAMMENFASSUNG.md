@@ -85,6 +85,21 @@ Tablare = Gebinde / Gebinde je Tablar (Lagerplanung); Höhe je Tablar = Gebindeh
 - Spalten: Lift, Gebinde, Ist, Verbrauch, IST-LU (rot < 1), Ist-Wert, Platz mm / ≈ Tablare, Priorität, Ziel-Ø, Abbaupotenzial CHF = (Ist − Ziel-Ø) × Preis, Platz frei ≈ mm, Ursache/Aktion aus dem Kennzahlen-Export.
 - Kennzahlen (Ziel-LU 4): 1'463 Lift-Artikel mit Bestand, davon 927 mit LU < 1 (1.75 Mio. CHF), Abbaupotenzial gesamt 1.70 Mio. CHF, ≈ 15'700 mm Lifthöhe frei; die Top 50 enthalten 29 % des Abbaupotenzials.
 
+## Blatt «DREIER» – Aussenlager für max. 80 % Lift-Füllgrad (06.10.2026)
+- Basis Ist-Bestand der Lift-Artikel (32'326 mm = 91 %). Ziel-Füllgrad (C5) 80 % = 28'560 mm → heute 3'766 mm zu viel.
+- Schritt 1 (LU 2 / LU 3): Überbestand über dem MAX geht ins DREIER – «Nur bis Ziel-Füllgrad» (Standard, tiefster Umschlag zuerst) oder «Alles» (C9). Schritt 2: ganze Artikel mit tiefstem Umschlag.
+
+| | Ist | LU 2 | LU 3 | LU 2 «Alles» | LU 3 «Alles» |
+|---|---|---|---|---|---|
+| DREIER Lifthöhe | 3'817 mm | 3'801 mm | 3'801 mm | 9'319 mm | 10'286 mm |
+| ≈ Tablare / ≈ m² | 16 / 57 m² | 16 / 56 m² | 16 / 56 m² | 40 / 138 m² | 44 / 152 m² |
+| Wert | 0.40 Mio. | 0.48 Mio. | 0.48 Mio. | 1.18 Mio. | 1.23 Mio. |
+| Artikel | 254 ganz | 377 Teilmengen | 377 Teilmengen | 766 Teilmengen | 799 Teilmengen |
+| Lift danach | 80 % | 80 % | 80 % | 64 % | 62 % |
+
+- Ergebnis: Für 80 % reicht es, Artikel **ohne Verbrauch 2025** (IST-LU 0) ins DREIER zu geben – ganz (Ist) bzw. nur deren Überbestand (LU 2/3).
+- Artikelliste je Szenario im Blatt DREIER (Top 300 nach Lifthöhe), vollständig im Blatt Artikel (Spalten «DREIER Ist / LU 2 / LU 3 Stk»).
+
 ## Annahmen
 1. Lose Artikel: Tablar-Anteil je Artikel KTL 0.03, PAL 0.15, LIFT1 1.0, andere 0.15. In Lift 2 sind rund 35 % (Ist) bis 40 % (C · LU 2) der Tablare geschätzt (Cockpit Zeilen 33–37).
 2. Fehlt «Menge pro Gebinde» (2 Artikel, S71): Der ganze Ist-Bestand gilt als 1 Gebinde, mit Hinweis.
