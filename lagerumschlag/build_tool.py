@@ -447,7 +447,7 @@ def read_old(path):
     old = {}
     old["version"] = wf["Parameter"]["Z1"].value if "Parameter" in wf.sheetnames else None
     # Parameter: alle Zellen mit gelber Füllung
-    for sh in ("Parameter", "Cockpit"):
+    for sh in ("Parameter", "Cockpit", "Einkauf"):
         if sh in wf.sheetnames:
             d = {}
             for row in wf[sh].iter_rows():
@@ -512,6 +512,8 @@ GEB_LIFT_DEFAULT = [(c, 3) for c in ("S21", "S22", "S32", "S33", "S41", "S51", "
                    [(c, 2) for c in ("S61", "S62", "S63", "S71", "S72", "S73", "S81", "S82", "S83",
                                      "P20", "P21", "P22", "P23", "P24", "P25", "LOSE")]
 LU_LIST = [2, 2.5, 3, 3.5, 4, 5, 6, 8]
+EINKAUF_SORT = ["Kombiniert (Platz + Wert + tiefer LU)", "Grösste Lagerfläche", "Höchster Lagerwert", "Tiefster Umschlag",
+                "Grösstes Abbaupotenzial"]
 VARIANTS = ["A – Ist-Bestand", "B – Ziel-LU", "C – Ziel-LU oder Ist"]
 IST_MODES = ["Export (Bestandsmenge)", "Jahresanfang 2025 + Export"]
 HL_FIRST, HL_LAST = 35, 64
@@ -525,6 +527,7 @@ def build(D, old):
     wb = Workbook()
     wsC = wb.active
     wsC.title = "Cockpit"
+    wsE = wb.create_sheet("Einkauf")
     wsS = wb.create_sheet("Szenarien")
     wsA = wb.create_sheet("Artikel")
     wsP = wb.create_sheet("Parameter")
@@ -652,6 +655,9 @@ def build(D, old):
         pin(ws, f"A{23 + i}", v, oldP, fmt="0.0")
     for i, v in enumerate(VARIANTS):
         put(ws, f"D{23 + i}", v)
+    put(ws, "G22", "Einkauf: Sortierung (nicht ändern)", bold=True, size=11)
+    for i, v in enumerate(EINKAUF_SORT):
+        put(ws, f"G{23 + i}", v)
     put(ws, "A32", "Zuordnung Hauptlager → Lift  (1 / 2 / 3 / 2+3 / Nein)", bold=True, size=11)
     put(ws, "F32", "Zuordnung Gebinde → Lift (nur Liftgruppe 2+3)", bold=True, size=11)
     for j, h in enumerate(["Hauptlager", "Lift", "Tablare je loser Artikel (Startwert)"]):
@@ -877,7 +883,11 @@ def build(D, old):
                     ("grp", "Liftgruppe", None), ("luo", "Ziel-LU Artikel (0=keiner)", "0.0"), ("finf", "MAX final gesetzt", "0"),
                     ("finv", "MAX final Wert", "#,##0"), ("mblg", "MB + LG", "#,##0"), ("mbn", "MB (Zahl)", "#,##0"), ("lgn", "LG (Zahl)", "#,##0"), ("istn", "Gebinde bei Ist", "#,##0"),
                     ("finn", "Gebinde bei MAX final", "#,##0"), ("hgt", "Gebindehöhe cm", "0"), ("maxh", "max. Ladehöhe Lift mm", "0"),
-                    ("fach", "Fach lt. Liftbericht (Tablare)", "0.00")]:
+                    ("fach", "Fach lt. Liftbericht (Tablare)", "0.00"),
+                    ("hI", "Einkauf: Höhe Ist mm", "#,##0"), ("luI", "Einkauf: IST-LU", "0.00"), ("wI", "Einkauf: Ist-Wert", "#,##0"),
+                    ("avgD", "Einkauf: Ziel-Ø", "#,##0.0"), ("abbau", "Einkauf: Abbaupotenzial CHF", "#,##0"),
+                    ("frei", "Einkauf: Platz frei mm", "#,##0"), ("score", "Einkauf: Priorität (0–3)", "0.00"),
+                    ("ekey", "Einkauf: Sortierschlüssel", "0.000000")]:
         col(k, h, 9, "f", 3, f)
     C = {c["key"]: L(i + 1) for i, c in enumerate(COLS)}
     KIND = {c["key"]: c["kind"] for c in COLS}
@@ -904,6 +914,15 @@ def build(D, old):
         "ist": ('=MAX(0,IF(AND(Parameter!$B$21="Ja",ISNUMBER(@bestr@)),@bestr@,'
                 'IF(Parameter!$B$20="Jahresanfang 2025 + Export",@ja@+@bm@,@bm@)))'),
         "istwert": "=@ist@*@preis@",
+        "hI": ('=IF(AND(OR(@grp@="L1",@grp@="L23",@grp@="LIFT"),@ist@>0),@hpt@*IF(@fach@>0,@fach@*MAX(1,@ist@/@kapr@),'
+               'IF(@lose@=1,@la@,IF(@gpt@>0,@istn@/@gpt@,0))/MAX(0.1,N(Parameter!$M$21))),"")'),
+        "luI": '=IF(@hI@="","",@verb@/@ist@)',
+        "wI": '=IF(@hI@="","",@ist@*@preis@)',
+        "avgD": '=IF(@hI@="","",(@mbn@+ROUNDUP(@mbn@+MAX(@lgn@,2*(@verb@/MAX(0.1,N(Einkauf!$C$6))-@mbn@)),0))/2)',
+        "abbau": '=IF(@hI@="","",MAX(0,@ist@-@avgD@)*@preis@)',
+        "frei": '=IF(@hI@="","",@hI@*MAX(0,1-@avgD@/@ist@))',
+        "score": '=IF(@hI@="","",PERCENTRANK(#hI#,@hI@)+PERCENTRANK(#wI#,@wI@)+1-PERCENTRANK(#luI#,@luI@))',
+        "ekey": ('=IF(@hI@="","",CHOOSE(MATCH(Einkauf!$C$5,Parameter!$G$23:$G$27,0),@score@,@hI@,@wI@,-@luI@,@abbau@)+ROW()/1000000000)'),
         "verb": "=@verbx@*Parameter!$B$18",
         "gpt": f'=IF(@lose@=1,0,IFERROR(VLOOKUP(@geb_e@,{GEB_RNG},13,0)+0,0))',
         "zgrp": (f'=IF(AND(Parameter!$B$19="Ja",@liz@<>"",ISNUMBER(MATCH(@liz@,{LIZT_K},0))),VLOOKUP(@liz@,{LIZT},2,0),'
@@ -1336,6 +1355,96 @@ def build(D, old):
     ws.row_dimensions[4].height = 30
     ws.freeze_panes = "C5"
 
+    # ------------------------------------------------------------------ Einkauf (Dashboard)
+    ws = wsE
+    NTOP = 50
+    oldE = {} if (old or {}).get("version") != TOOL_VERSION else (old or {}).get("Einkauf", {})
+    put(ws, "B1", "Einkauf – Artikel zum Geradebiegen", bold=True, size=16, color="1F3864")
+    put(ws, "B2", "Lift-Artikel mit Bestand, bewertet nach Platz im Lift, Lagerwert und Umschlag. Priorität = Perzentil Platz + Perzentil Wert "
+                  "+ (1 − Perzentil LU), 0 bis 3 – je höher, desto dringender. Abbaupotenzial = (Ist − Ziel-Ø) × Preis.", italic=True, color="595959")
+    put(ws, "B3", "Kommentare/Entscheide bitte im Blatt «Artikel» (MAX final, Ziel-LU Artikel, Kommentar Diskussion) erfassen.", italic=True, color="595959")
+    put(ws, "B5", "Sortieren nach", bold=True)
+    ws.merge_cells("C5:E5")
+    pin(ws, "C5", EINKAUF_SORT[0], oldE, bold=True)
+    dv = DataValidation(type="list", formula1="Parameter!$G$23:$G$27", allow_blank=False)
+    ws.add_data_validation(dv)
+    dv.add("C5")
+    put(ws, "B6", "Ziel-LU (für Ziel-Ø / Abbau)", bold=True)
+    pin(ws, "C6", 4, oldE, fmt="0.0", align="center")
+    dv = DataValidation(type="list", formula1="Parameter!$A$23:$A$30", allow_blank=False, showErrorMessage=False)
+    ws.add_data_validation(dv)
+    dv.add("C6")
+    # KPI-Kacheln
+    elig = RG("hI")
+    kpis = [
+        ("Lift-Artikel mit Bestand", f"=COUNT({elig})", "#,##0"),
+        ("davon Umschlag < 1", f'=COUNTIFS({RG("luI")},"<1")', "#,##0"),
+        ("Lagerwert dieser Artikel", f'=SUMIFS({RG("wI")},{RG("luI")},"<1")', "#,##0"),
+        ("Abbaupotenzial gesamt CHF", f"=SUM({RG('abbau')})", "#,##0"),
+        ("Platz frei bei Ziel-LU ≈ mm", f"=SUM({RG('frei')})", "#,##0"),
+        (f"Top {NTOP}: Anteil am Abbaupotenzial", f"=IF(SUM({RG('abbau')})>0,SUM(O11:O{10 + NTOP})/SUM({RG('abbau')}),0)", "0%"),
+    ]
+    for j, (lbl, f, fm) in enumerate(kpis):
+        col_ = L(7 + j * 2)
+        ws.merge_cells(f"{col_}5:{L(8 + j * 2)}5")
+        ws.merge_cells(f"{col_}6:{L(8 + j * 2)}7")
+        put(ws, f"{col_}5", lbl, bold=True, size=9, fill=SUB, align="center", wrap=True)
+        put(ws, f"{col_}6", f, bold=True, size=16, fmt=fm, align="center", color="1F3864")
+    ws.row_dimensions[5].height = 28
+    hdr_e = ["Rang", "Artikel", "Bezeichnung", "Lift", "Gebinde", "Ist-Bestand", "Verbrauch 12 M", "IST-LU", "Ist-Wert CHF",
+             "Platz Ist mm", "≈ Tablare", "Priorität (0–3)", "Ziel-Ø", "Abbaupotenzial CHF", "Platz frei ≈ mm", "Ursache / Aktion"]
+    for j, h in enumerate(hdr_e):
+        put(ws, f"{L(2 + j)}10", h, bold=True, fill=HEAD, color="FFFFFF", wrap=True, align="center", border=True)
+    ws.row_dimensions[10].height = 30
+    src = {"Artikel": "nr", "Bezeichnung": "bez", "Lift": "lift", "Gebinde": "geb_e", "Ist-Bestand": "ist", "Verbrauch 12 M": "verb",
+           "IST-LU": "luI", "Ist-Wert CHF": "wI", "Platz Ist mm": "hI", "Priorität (0–3)": "score", "Ziel-Ø": "avgD",
+           "Abbaupotenzial CHF": "abbau", "Platz frei ≈ mm": "frei"}
+    fmts = {"Ist-Bestand": "#,##0", "Verbrauch 12 M": "#,##0", "IST-LU": "0.00", "Ist-Wert CHF": "#,##0", "Platz Ist mm": "#,##0",
+            "≈ Tablare": "0.0", "Priorität (0–3)": "0.00", "Ziel-Ø": "#,##0", "Abbaupotenzial CHF": "#,##0", "Platz frei ≈ mm": "#,##0"}
+    for k in range(1, NTOP + 1):
+        r = 10 + k
+        put(ws, f"B{r}", k, border=True, align="center")
+        # Zeile im Blatt Artikel (Hilfsspalte R)
+        put(ws, f"R{r}", f'=IFERROR(MATCH(LARGE({RG("ekey")},B{r}),{RG("ekey")},0),"")', color="FFFFFF")
+        for j, h in enumerate(hdr_e[1:], start=1):
+            cl = L(2 + j)
+            if h in src:
+                f = f'=IF($R{r}="","",INDEX({RG(src[h])},$R{r}))'
+            elif h == "≈ Tablare":
+                f = f'=IF($R{r}="","",K{r}/Parameter!$M$24)'
+            else:
+                f = (f'=IF($R{r}="","",TRIM(INDEX({RG("ursache")},$R{r})&IF(INDEX({RG("aktion")},$R{r})<>""," → "&'
+                     f'INDEX({RG("aktion")},$R{r}),"")))')
+            put(ws, f"{cl}{r}", f, border=True, fmt=fmts.get(h), size=9, wrap=(h == "Ursache / Aktion"))
+    last_r = 10 + NTOP
+    ws.conditional_formatting.add(f"I11:I{last_r}", CellIsRule(operator="lessThan", formula=["1"], fill=RED_F))
+    ws.conditional_formatting.add(f"I11:I{last_r}", CellIsRule(operator="between", formula=["1", "2"], fill=ORANGE_F))
+    ws.conditional_formatting.add(f"J11:J{last_r}", DataBarRule(start_type="min", end_type="max", color="5B9BD5", showValue=True))
+    ws.conditional_formatting.add(f"K11:K{last_r}", DataBarRule(start_type="min", end_type="max", color="A9D18E", showValue=True))
+    ws.conditional_formatting.add(f"O11:O{last_r}", DataBarRule(start_type="min", end_type="max", color="F4B084", showValue=True))
+    ws.conditional_formatting.add(f"M11:M{last_r}", DataBarRule(start_type="num", start_value=0, end_type="num", end_value=3, color="C00000", showValue=True))
+    for cl, w in zip("ABCDEFGHIJKLMNOPQR", (2, 6, 11, 30, 5, 8, 9, 9, 7, 11, 9, 8, 9, 9, 12, 10, 40, 4)):
+        ws.column_dimensions[cl].width = w
+    ws.column_dimensions["R"].hidden = True
+    ws.freeze_panes = "D11"
+    # Diagramm: Top 15 Abbaupotenzial
+    ch = BarChart()
+    ch.type = "bar"
+    ch.title = "Top 15 – Abbaupotenzial CHF (aktuelle Sortierung)"
+    ch.add_data(Reference(ws, min_col=15, min_row=10, max_row=25), titles_from_data=True)
+    ch.set_categories(Reference(ws, min_col=3, min_row=11, max_row=25))
+    ch.y_axis.numFmt = "#,##0"
+    ch.x_axis.scaling.orientation = "maxMin"
+    ch.legend = None
+    ch.height, ch.width = 10, 16
+    ws.add_chart(ch, f"T10")
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.sheet_properties.tabColor = "C00000"
+    ws.sheet_view.zoomScale = 90
+
     # ------------------------------------------------------------------ Liftbericht
     ws = wsL
     put(ws, "A1", "Liftbericht (Modula «Artikelbestand für Maschine»)", bold=True, size=14)
@@ -1382,6 +1491,9 @@ def build(D, old):
         ("Parameter E27 = Ja: Die Spalte «Lift ausgeglichen» verteilt die Artikel so, dass alle 3 Lifte möglichst gleich voll sind – gleichzeitig für Ist, B und C bei LU 3 (Parameter im Skript: AUSGLEICH_LU): Liftbericht-Artikel "
          "bleiben in Lift 1, Trennbleche/Paletten nur in die ausfahrbaren Lifte 1 und 2, alles andere in den Lift mit dem tiefsten Füllgrad. Wird bei jedem Neuaufbau neu berechnet. "
          "«Lift manuell» hat Vorrang.", ""),
+        ("Einkauf (Dashboard)", "b"),
+        ("Zeigt die 50 Lift-Artikel mit Bestand, die zuerst angegangen werden sollten. Sortierung wählbar: kombiniert (Platz + Wert + tiefer Umschlag), Fläche, Wert, "
+         "tiefster Umschlag oder Abbaupotenzial. Abbaupotenzial = (Ist − Ziel-Ø bei gewähltem LU) × Preis; Platz frei ≈ anteilig.", ""),
         ("Lose Artikel grob geschätzt", "b"),
         ("Artikel ohne Gebinde (KTL/PAL) bekommen aus der Bezeichnung eine Schätzklasse: Klein = Eurobox S51 à 20 Stk, Mittel = S61 à 4 Stk, Gross = Trennblech S81 à 2 Stk "
          "(Parameter I27:K29); mindestens der Ist-Bestand bzw. eine Losgrösse passt in 1 Gebinde. Damit rechnen sie wie Gebinde-Artikel. Klasse im Blatt Artikel änderbar; «Gebindekategorie neu» oder «Tablare lose» haben Vorrang. Kein Stapeln.", ""),

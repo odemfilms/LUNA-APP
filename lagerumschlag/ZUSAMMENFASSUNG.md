@@ -80,6 +80,11 @@ Tablare = Gebinde / Gebinde je Tablar (Lagerplanung); Höhe je Tablar = Gebindeh
 | B · LU 4 | 95 % | 88 % | 90 % | 91 % | JA |
 | C · LU 3 | 97 % | 120 % | 114 % | 110 % | NEIN (Übergang) |
 
+## Blatt «Einkauf» (Dashboard, 06.10.2026)
+- Top 50 Lift-Artikel mit Bestand, sortierbar: **Kombiniert** (Perzentil Platz + Perzentil Wert + 1 − Perzentil LU, 0–3), grösste Lagerfläche, höchster Lagerwert, tiefster Umschlag, grösstes Abbaupotenzial.
+- Spalten: Lift, Gebinde, Ist, Verbrauch, IST-LU (rot < 1), Ist-Wert, Platz mm / ≈ Tablare, Priorität, Ziel-Ø, Abbaupotenzial CHF = (Ist − Ziel-Ø) × Preis, Platz frei ≈ mm, Ursache/Aktion aus dem Kennzahlen-Export.
+- Kennzahlen (Ziel-LU 4): 1'463 Lift-Artikel mit Bestand, davon 927 mit LU < 1 (1.75 Mio. CHF), Abbaupotenzial gesamt 1.70 Mio. CHF, ≈ 15'700 mm Lifthöhe frei; die Top 50 enthalten 29 % des Abbaupotenzials.
+
 ## Annahmen
 1. Lose Artikel: Tablar-Anteil je Artikel KTL 0.03, PAL 0.15, LIFT1 1.0, andere 0.15. In Lift 2 sind rund 35 % (Ist) bis 40 % (C · LU 2) der Tablare geschätzt (Cockpit Zeilen 33–37).
 2. Fehlt «Menge pro Gebinde» (2 Artikel, S71): Der ganze Ist-Bestand gilt als 1 Gebinde, mit Hinweis.
